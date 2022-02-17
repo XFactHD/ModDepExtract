@@ -1,0 +1,25 @@
+plugins {
+    id 'java'
+}
+
+group 'xfacthd.moddepextract'
+version '1.0-SNAPSHOT'
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.apache.maven:maven-artifact:3.8.1'
+    implementation 'com.google.guava:guava:31.0.1-jre'
+    implementation 'com.moandjiezana.toml:toml4j:0.7.2'
+    implementation 'net.sf.jopt-simple:jopt-simple:6.0-alpha-3'
+}

@@ -1,0 +1,7 @@
+.gradle
+.idea
+build
+lib
+out
+pg_config
+*.html
