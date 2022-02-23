@@ -27,7 +27,8 @@ public class Main
     private static final OptionSpec<String> FLAGGED_ATS_OPT = PARSER.accepts("flagged_ats", "Mark AT targets to be flagged").availableIf(EXTRACT_ATS_OPT).withOptionalArg().ofType(String.class);
     private static final OptionSpec<Boolean> DARK_OPT = PARSER.accepts("dark", "Dark mode for the resulting web page").withOptionalArg().ofType(Boolean.class);
     private static final OptionSpec<Boolean> OPEN_RESULT_OPT = PARSER.accepts("open_result", "Automatically open the resulting web page in the standard browser").withOptionalArg().ofType(Boolean.class);
-    private static final String RESULT_FILE_NAME = "dependencies.html";
+    private static final String DEP_RESULT_FILE_NAME = "dependencies.html";
+    private static final String AT_RESULT_FILE_NAME = "accesstransformers.html";
     private static final Comparator<ModEntry> ENTRY_COMPARATOR = (entryOne, entryTwo) -> compareModIDs(entryOne.modId(), entryTwo.modId());
     private static final Comparator<Dependency> DEP_COMPARATOR = (depOne, depTwo) -> compareModIDs(depOne.modId(), depTwo.modId());
 
@@ -75,14 +76,21 @@ public class Main
         validateDependenciesSatisfied(modEntries, depResults);
         LOG.info("Dependencies validated");
 
-        LOG.info("Building display...");
-        writeResultPage(depResults, mcVersion, forgeVersion, extractATs, atEntries, darkMode);
+        LOG.info("Building dependency display...");
+        writeDependencyResultPage(depResults, mcVersion, forgeVersion, darkMode);
         LOG.info("Dependency display built");
+
+        if (extractATs)
+        {
+            LOG.info("Building AT display...");
+            writeAccessTransformerResultPage(atEntries, darkMode);
+            LOG.info("AT display built");
+        }
 
         if (openResult)
         {
             LOG.debug("Opening in default app...");
-            Utils.openFileInDefaultSoftware(RESULT_FILE_NAME);
+            Utils.openFileInDefaultSoftware(DEP_RESULT_FILE_NAME);
         }
     }
 
@@ -259,16 +267,14 @@ public class Main
         }
     }
 
-    private static void writeResultPage(
+    private static void writeDependencyResultPage(
             Table<ModEntry, Dependency, DepResult> depResults,
             String mcVersion,
             String forgeVersion,
-            boolean extractATs,
-            Map<String, List<AccessTransformer>> atEntries,
             boolean darkMode
     )
     {
-        PrintWriter writer = Utils.makePrintWriter(RESULT_FILE_NAME);
+        PrintWriter writer = Utils.makePrintWriter(DEP_RESULT_FILE_NAME);
         if (writer == null)
         {
             LOG.error("Failed to write result page!");
@@ -281,18 +287,13 @@ public class Main
                 head ->
                 {
                     Html.element(head, "title", "", "Mod Dependency Analysis");
-                    Html.style(head, style ->
-                    {
-                        Css.declareClass(style, "mod_table", clazz ->
-                        {
-                            Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
-                            Css.property(clazz, "border-collapse", "collapse");
-                            Css.property(clazz, "padding", "4px");
-                            Css.property(clazz, "vertical-align", "top");
-                        });
-
-                        Css.declareClass(style, "at_entry", clazz -> Css.property(clazz, "font-family", "'Courier New', monospace"));
-                    });
+                    Html.style(head, style -> Css.declareClass(style, "mod_table", clazz ->
+                            {
+                                Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
+                                Css.property(clazz, "border-collapse", "collapse");
+                                Css.property(clazz, "padding", "4px");
+                                Css.property(clazz, "vertical-align", "top");
+                            }));
                 },
                 body ->
                 {
@@ -356,8 +357,43 @@ public class Main
                                 }));
                             })
                     );
+                }
+        );
 
-                    if (!extractATs) { return; }
+        writer.close();
+    }
+
+    private static void writeAccessTransformerResultPage(Map<String, List<AccessTransformer>> atEntries, boolean darkMode)
+    {
+        PrintWriter writer = Utils.makePrintWriter(AT_RESULT_FILE_NAME);
+        if (writer == null)
+        {
+            LOG.error("Failed to write result page!");
+            return;
+        }
+
+        Html.html(
+                writer,
+                darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "",
+                head ->
+                {
+                    Html.element(head, "title", "", "Mod Dependency Analysis");
+                    Html.style(head, style ->
+                    {
+                        Css.declareClass(style, "mod_table", clazz ->
+                        {
+                            Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
+                            Css.property(clazz, "border-collapse", "collapse");
+                            Css.property(clazz, "padding", "4px");
+                            Css.property(clazz, "vertical-align", "top");
+                        });
+
+                        Css.declareClass(style, "at_entry", clazz -> Css.property(clazz, "font-family", "'Courier New', monospace"));
+                    });
+                },
+                body ->
+                {
+                    Html.element(body, "h1", "", "AccessTransformer Dump");
 
                     long count = atEntries.values()
                             .stream()
@@ -369,12 +405,12 @@ public class Main
                             .filter(AccessTransformer::flagged)
                             .count();
 
-                    Html.element(body, "h2", "", "AccessTransformers");
                     body.println(String.format("Found %d AccessTransformer entries.", count));
                     body.print("Found");
                     Html.span(body, Html.getBoolColor(flagged == 0), Long.toString(flagged));
                     body.println("flagged AccessTransformer entries.<br>");
 
+                    String tableAttrib = "class=\"mod_table\"";
                     MutableObject<String> lastAtOwner = new MutableObject<>("");
                     Html.table(
                             body,
