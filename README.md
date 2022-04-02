@@ -6,6 +6,8 @@ ModDepExtract is a CLI tool to extract dependency information and other details 
 
 - Extract dependency information from the mod JARs and validate the resulting dependency matrix
 - Extract AccessTransformer configuration from the mod JARs and check for problematic ATs
+- Extract Mixin configuration from the mod JARs
+- Extract JS coremod configuration from the mod JARs
 
 ## Usage
 
@@ -20,6 +22,8 @@ Execute the built JAR from a command line interface with the following arguments
   - Useful to find out which mod breaks a coremod by ATing a field the coremod operates on (`FluidBlock#fluid` is a prominent example)
   - The given list most not contain spaces
   - optional, only available when `--extract_ats` is set
+- `--extract_mixins`: If true, Mixin configurations will be extracted from the mod JARs and listed per JAR in a separate `mixins.html` (optional)
+- `--extract_coremods`: If true, JS coremod configurations will be extracted from the mod JARs and listed per JAR in a separate `coremods.html` (optional)
 - `--dark`: Enable dark mode for the generated web page (optional)
 - `--open_result`: If true, the resulting web page will be opened automatically in the default browser (optional)
 
