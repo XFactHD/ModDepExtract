@@ -25,7 +25,7 @@ public class HtmlWriter
 
     public void println(String line) { print(line + "<br>"); }
 
-    private void printIndent()
+    public void printIndent()
     {
         for (int i = 0; i < indent * 4; i++)
         {

@@ -69,6 +69,17 @@ public final class Html
 
     public static void tableCell(HtmlWriter writer, String attribs, Consumer<HtmlWriter> contentWriter) { element(writer, "td", attribs, contentWriter); }
 
+    public static void abbreviation(HtmlWriter writer, String title, String content)
+    {
+        abbreviation(writer, title, contentWriter -> contentWriter.print(content));
+    }
+
+    public static void abbreviation(HtmlWriter writer, String title, Consumer<HtmlWriter> contentWriter)
+    {
+        String attribs = String.format("title=\"%s\"", title);
+        element(writer, "abbr", attribs, contentWriter);
+    }
+
 
 
     public static void writeBoolean(HtmlWriter writer, String attribs, boolean value)
