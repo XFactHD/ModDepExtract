@@ -1,5 +1,6 @@
 package xfacthd.depextract.extractor;
 
+import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import xfacthd.depextract.Main;
 import xfacthd.depextract.html.Css;
@@ -14,17 +15,45 @@ public class AccessTransformerExtractor extends DataExtractor
 {
     private static final String AT_RESULT_FILE_NAME = "accesstransformers.html";
 
-    private final List<String> flaggedATs;
+    private final List<String> flaggedATs = new ArrayList<>();
     private final Map<String, List<AccessTransformer>> atEntries = new HashMap<>();
+    private OptionSpec<Boolean> extractATsOpt = null;
+    private OptionSpec<String> flaggedATsOpt = null;
+    private boolean active = false;
 
-    public AccessTransformerExtractor(List<String> flaggedATs)
+    @Override
+    public void registerOptions(OptionParser parser)
     {
-        this.flaggedATs = flaggedATs;
-        if (!flaggedATs.isEmpty())
+        extractATsOpt = parser.accepts("extract_ats", "Extract AccessTransformers from mods")
+                .withOptionalArg()
+                .ofType(Boolean.class);
+
+        flaggedATsOpt = parser.accepts("flagged_ats", "Mark AT targets to be flagged")
+                .availableIf(extractATsOpt)
+                .withOptionalArg()
+                .withValuesSeparatedBy(",")
+                .ofType(String.class);
+    }
+
+    @Override
+    public void readOptions(OptionSet options)
+    {
+        active = options.has(extractATsOpt) && options.valueOf(extractATsOpt);
+
+        if (active && options.has(flaggedATsOpt))
         {
-            Main.LOG.info("Flagged ATs: " + flaggedATs);
+            //flaggedATs.addAll(Arrays.asList(options.valueOf(flaggedATsOpt).split(",")));
+            flaggedATs.addAll(options.valuesOf(flaggedATsOpt));
+
+            if (!flaggedATs.isEmpty())
+            {
+                Main.LOG.info("Flagged ATs: " + flaggedATs);
+            }
         }
     }
+
+    @Override
+    public boolean isActive() { return active; }
 
     @Override
     public void acceptFile(String fileName, JarFile modJar)

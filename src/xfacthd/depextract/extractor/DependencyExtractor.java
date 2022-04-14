@@ -3,6 +3,7 @@ package xfacthd.depextract.extractor;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Table;
 import com.moandjiezana.toml.Toml;
+import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.maven.artifact.versioning.*;
 import xfacthd.depextract.Main;
@@ -20,18 +21,36 @@ public class DependencyExtractor extends DataExtractor
     private static final Comparator<ModEntry> ENTRY_COMPARATOR = (entryOne, entryTwo) -> compareModIDs(entryOne.modId(), entryTwo.modId());
     private static final Comparator<Dependency> DEP_COMPARATOR = (depOne, depTwo) -> compareModIDs(depOne.modId(), depTwo.modId());
 
-    private final String mcVersion;
-    private final String forgeVersion;
     private final Map<String, ModEntry> modEntries = new HashMap<>();
     private final Table<ModEntry, Dependency, DepResult> depResults = HashBasedTable.create(modEntries.size(), 4);
+    private OptionSpec<String> minecraftOpt = null;
+    private OptionSpec<String> forgeOpt = null;
+    private String mcVersion = "";
+    private String forgeVersion = "";
     private int jarCount = 0;
     private int hiddenModCount = 0;
 
-    public DependencyExtractor(String mcVersion, String forgeVersion)
+    @Override
+    public void registerOptions(OptionParser parser)
     {
-        this.mcVersion = mcVersion;
-        this.forgeVersion = forgeVersion;
+        minecraftOpt = parser.accepts("minecraft", "The version of Minecraft being used")
+                .withRequiredArg()
+                .ofType(String.class);
+
+        forgeOpt = parser.accepts("forge", "The version of Forge being used")
+                .withRequiredArg()
+                .ofType(String.class);
     }
+
+    @Override
+    public void readOptions(OptionSet options)
+    {
+        this.mcVersion = options.valueOf(minecraftOpt);
+        this.forgeVersion = options.valueOf(forgeOpt);
+    }
+
+    @Override
+    public boolean isActive() { return true; }
 
     @Override
     public void acceptFile(String fileName, JarFile modJar)
@@ -198,7 +217,9 @@ public class DependencyExtractor extends DataExtractor
 
     public int getModCount() { return modEntries.size() - hiddenModCount; }
 
+    public String getMCVersion() { return mcVersion; }
 
+    public String getForgeVersion() { return forgeVersion; }
 
     private static Map<String, ModEntry> parseModEntriesInFile(String fileName, InputStream tomlStream, Manifest manifest)
     {
@@ -220,6 +241,10 @@ public class DependencyExtractor extends DataExtractor
             if (version.equals("${file.jarVersion}"))
             {
                 version = manifest.getMainAttributes().getValue("Implementation-Version");
+            }
+            if (version == null)
+            {
+                version = "0.0";
             }
 
             ModEntry entry = new ModEntry(

@@ -1,6 +1,7 @@
 package xfacthd.depextract.extractor;
 
 import com.google.gson.*;
+import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.commons.lang3.tuple.Pair;
 import xfacthd.depextract.Main;
@@ -19,6 +20,25 @@ public class CoremodExtractor extends DataExtractor
     private static final Gson GSON = new Gson();
 
     private final Map<String, CoremodConfig> coremodEntries = new HashMap<>();
+    private OptionSpec<Boolean> extractCoremodsOpt = null;
+    private boolean active = false;
+
+    @Override
+    public void registerOptions(OptionParser parser)
+    {
+        extractCoremodsOpt = parser.accepts("extract_coremods", "Extract JS coremods from mods")
+                .withOptionalArg()
+                .ofType(Boolean.class);
+    }
+
+    @Override
+    public void readOptions(OptionSet options)
+    {
+        active = options.has(extractCoremodsOpt) && options.valueOf(extractCoremodsOpt);
+    }
+
+    @Override
+    public boolean isActive() { return active; }
 
     @Override
     public void acceptFile(String fileName, JarFile modJar)

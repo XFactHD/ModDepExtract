@@ -13,33 +13,39 @@ import java.util.jar.*;
 public class Main
 {
     public static final Log LOG = new Log("main");
-    private static final OptionParser PARSER = new OptionParser();
-    private static final OptionSpec<String> MINECRAFT_OPT = PARSER.accepts("minecraft", "The version of Minecraft being used").withRequiredArg().ofType(String.class);
-    private static final OptionSpec<String> FORGE_OPT = PARSER.accepts("forge", "The version of Forge being used").withRequiredArg().ofType(String.class);
-    private static final OptionSpec<File> DIRECTORY_OPT = PARSER.accepts("directory", "The root directory of the Minecraft installation").withRequiredArg().ofType(File.class);
-    private static final OptionSpec<Boolean> EXTRACT_ATS_OPT = PARSER.accepts("extract_ats", "Extract AccessTransformers from mods").withOptionalArg().ofType(Boolean.class);
-    private static final OptionSpec<String> FLAGGED_ATS_OPT = PARSER.accepts("flagged_ats", "Mark AT targets to be flagged").availableIf(EXTRACT_ATS_OPT).withOptionalArg().ofType(String.class);
-    private static final OptionSpec<Boolean> EXTRACT_MIXINS_OPT = PARSER.accepts("extract_mixins", "Extract Mixin configs from mods").withOptionalArg().ofType(Boolean.class);
-    private static final OptionSpec<Boolean> EXTRACT_COREMODS_OPT = PARSER.accepts("extract_coremods", "Extract JS coremods from mods").withOptionalArg().ofType(Boolean.class);
-    private static final OptionSpec<Boolean> DARK_OPT = PARSER.accepts("dark", "Dark mode for the resulting web page").withOptionalArg().ofType(Boolean.class);
-    private static final OptionSpec<Boolean> OPEN_RESULT_OPT = PARSER.accepts("open_result", "Automatically open the resulting web page in the standard browser").withOptionalArg().ofType(Boolean.class);
 
     public static void main(String[] args)
     {
-        OptionSet options = PARSER.parse(args);
+        List<DataExtractor> extractors = new ArrayList<>();
 
-        String mcVersion = options.valueOf(MINECRAFT_OPT);
-        String forgeVersion = Utils.getForgeVersion(options.valueOf(FORGE_OPT));
-        File directory = options.valueOf(DIRECTORY_OPT);
-        boolean extractATs = options.has(EXTRACT_ATS_OPT) && options.valueOf(EXTRACT_ATS_OPT);
-        List<String> flaggedATs = Arrays.asList(options.valueOf(FLAGGED_ATS_OPT).split(","));
-        boolean extractMixins = options.hasArgument(EXTRACT_MIXINS_OPT) && options.valueOf(EXTRACT_MIXINS_OPT);
-        boolean extractCoremods = options.has(EXTRACT_COREMODS_OPT) && options.valueOf(EXTRACT_COREMODS_OPT);
-        boolean darkMode = options.hasArgument(DARK_OPT) && options.valueOf(DARK_OPT);
-        boolean openResult = options.hasArgument(OPEN_RESULT_OPT) && options.valueOf(OPEN_RESULT_OPT);
+        DependencyExtractor depExtractor = new DependencyExtractor();
+        extractors.add(depExtractor);
+        extractors.add(new AccessTransformerExtractor());
+        extractors.add(new MixinExtractor());
+        extractors.add(new CoremodExtractor());
 
-        LOG.info("Minecraft version: " + mcVersion);
-        LOG.info("Forge version: " + forgeVersion);
+        OptionParser parser = new OptionParser();
+        OptionSpec<File> directoryOpt = parser.accepts("directory", "The root directory of the Minecraft installation")
+                .withRequiredArg()
+                .ofType(File.class);
+        OptionSpec<Boolean> darkOpt = parser.accepts("dark", "Dark mode for the resulting web page")
+                .withOptionalArg()
+                .ofType(Boolean.class);
+        OptionSpec<Boolean> openResultOpt = parser.accepts("open_result", "Automatically open the resulting web page in the standard browser")
+                .withOptionalArg()
+                .ofType(Boolean.class);
+        extractors.forEach(extractor -> extractor.registerOptions(parser));
+
+        OptionSet options = parser.parse(args);
+        extractors.forEach(extractor -> extractor.readOptions(options));
+        extractors = extractors.stream().filter(DataExtractor::isActive).toList();
+
+        File directory = options.valueOf(directoryOpt);
+        boolean darkMode = options.hasArgument(darkOpt) && options.valueOf(darkOpt);
+        boolean openResult = options.hasArgument(openResultOpt) && options.valueOf(openResultOpt);
+
+        LOG.info("Minecraft version: " + depExtractor.getMCVersion());
+        LOG.info("Forge version: " + depExtractor.getForgeVersion());
         LOG.info("Instance directory: " + directory.getAbsolutePath());
 
         Preconditions.checkArgument(directory.isDirectory(), "Expected a directory for argument --directory, got a file");
@@ -54,23 +60,6 @@ public class Main
             return;
         }
         LOG.info("Found %d mod JARs", mods.length);
-
-        DependencyExtractor depExtractor = new DependencyExtractor(mcVersion, forgeVersion);
-
-        List<DataExtractor> extractors = new ArrayList<>();
-        extractors.add(depExtractor);
-        if (extractATs)
-        {
-            extractors.add(new AccessTransformerExtractor(flaggedATs));
-        }
-        if (extractMixins)
-        {
-            extractors.add(new MixinExtractor());
-        }
-        if (extractCoremods)
-        {
-            extractors.add(new CoremodExtractor());
-        }
 
         LOG.info("Discovering mod entries...");
         discoverModEntries(mods, extractors);

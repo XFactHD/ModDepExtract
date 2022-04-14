@@ -1,6 +1,7 @@
 package xfacthd.depextract.extractor;
 
 import com.google.gson.*;
+import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import xfacthd.depextract.Main;
 import xfacthd.depextract.html.*;
@@ -17,6 +18,25 @@ public class MixinExtractor extends DataExtractor
     private static final Gson GSON = new Gson();
 
     private final Map<String, List<MixinConfig>> mixinEntries = new HashMap<>();
+    private OptionSpec<Boolean> extractMixinsOpt = null;
+    private boolean active = false;
+
+    @Override
+    public void registerOptions(OptionParser parser)
+    {
+        extractMixinsOpt = parser.accepts("extract_mixins", "Extract Mixin configs from mods")
+                .withOptionalArg()
+                .ofType(Boolean.class);
+    }
+
+    @Override
+    public void readOptions(OptionSet options)
+    {
+        active = options.has(extractMixinsOpt) && options.valueOf(extractMixinsOpt);
+    }
+
+    @Override
+    public boolean isActive() { return active; }
 
     @Override
     public void acceptFile(String fileName, JarFile modJar)

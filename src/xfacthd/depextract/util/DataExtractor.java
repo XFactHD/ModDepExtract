@@ -1,5 +1,7 @@
 package xfacthd.depextract.util;
 
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
 import xfacthd.depextract.Main;
 
 import java.io.IOException;
@@ -8,6 +10,12 @@ import java.util.jar.*;
 
 public abstract class DataExtractor
 {
+    public abstract void registerOptions(OptionParser parser);
+
+    public abstract void readOptions(OptionSet options);
+
+    public abstract boolean isActive();
+
     public abstract void acceptFile(String fileName, JarFile modJar);
 
     public abstract void postProcessData();
