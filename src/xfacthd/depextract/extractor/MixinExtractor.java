@@ -22,7 +22,7 @@ public class MixinExtractor extends DataExtractor
     private static final String MIXIN_RESULT_FILE_NAME = "mixins.html";
     private static final String DEFAULT_DECOMP_PATH = "./forgeflower-1.5.498.29.jar";
     private static final Pattern SIMPLE_PATTERN = Pattern.compile("@Mixin\\((.+)\\)");
-    private static final Pattern COMPLEX_PATTERN = Pattern.compile("@Mixin\\(\\R(([ a-zA-Z_]+ = \\{?[a-zA-Z0-9./, $\"]+}?,?\\R)+)\\)");
+    private static final Pattern COMPLEX_PATTERN = Pattern.compile("@Mixin\\(\\R(([ a-zA-Z_]+ = \\{?[a-zA-Z0-9./, $\"-]+}?,?\\R)+)\\)");
     private static final MixinTarget[] EMPTY_ARRAY = new MixinTarget[0];
     private static final Gson GSON = new Gson();
 
@@ -255,9 +255,17 @@ public class MixinExtractor extends DataExtractor
             String match = simpleMatcher.group();
             Main.LOG.debug("Found target specifier '%s' in Mixin class '%s'", match, classPath);
 
-            String target = match.substring(match.indexOf('{') + 1, match.lastIndexOf('}')).replace(".class", "");
-            String fqn = findQualifiedName(imports, target);
-            return new MixinTarget[] { new MixinTarget(target, fqn) };
+            List<MixinTarget> targets = new ArrayList<>();
+
+            String literalTargets = match.substring(match.indexOf('{') + 1, match.lastIndexOf('}'));
+            for (String target : literalTargets.split(","))
+            {
+                target = target.trim().replace(".class", "");
+                String fqn = findQualifiedName(classPath, imports, target);
+                targets.add(new MixinTarget(target, fqn));
+            }
+
+            return targets.toArray(MixinTarget[]::new);
         }
 
         Matcher matcher = COMPLEX_PATTERN.matcher(mixinCode);
@@ -275,7 +283,7 @@ public class MixinExtractor extends DataExtractor
                 for (String target : literalTargets.split(","))
                 {
                     target = target.trim().replace(".class", "");
-                    String fqn = findQualifiedName(imports, target);
+                    String fqn = findQualifiedName(classPath, imports, target);
                     targets.add(new MixinTarget(target, fqn));
                 }
             }
@@ -312,9 +320,9 @@ public class MixinExtractor extends DataExtractor
         return EMPTY_ARRAY;
     }
 
-    private String findQualifiedName(String imports, String target)
+    private String findQualifiedName(String classPath, String imports, String target)
     {
-        Pattern pattern = Pattern.compile("import [a-zA-Z0-9.]+\\." + target + ";");
+        Pattern pattern = Pattern.compile("import [a-zA-Z0-9._]+\\." + target + ";");
         Matcher matcher = pattern.matcher(imports);
         if (matcher.find())
         {
@@ -322,7 +330,7 @@ public class MixinExtractor extends DataExtractor
             return match.substring(match.indexOf(' ') + 1, match.indexOf(';'));
         }
 
-        Main.LOG.error("Failed to find fully qualified name for class '%s'", target);
+        Main.LOG.error("Failed to find fully qualified name for class '%s' (targeted by Mixin class '%s')", target, classPath);
         return "";
     }
 
