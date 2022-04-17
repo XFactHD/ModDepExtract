@@ -81,6 +81,7 @@ public record Log(String name)
     public void log(Level level, Marker marker, String message)
     {
         if (!level.higherOrEqual(MIN_LEVEL)) { return; }
+        if (!marker.isActive()) { return; }
 
         String time = ZonedDateTime.now().format(DT_FORMAT);
         System.out.printf("[%s] [%s/%s] [%s/%s]: %s\n", time, name, level, findCaller(), marker.name(), message);
