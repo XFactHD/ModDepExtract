@@ -24,19 +24,27 @@ public abstract class DataExtractor
 
     protected static InputStream getInputStreamForEntry(JarFile file, JarEntry entry, String fileName)
     {
-        InputStream stream;
-
         try
         {
-            stream = file.getInputStream(entry);
+            return file.getInputStream(entry);
         }
         catch (IOException e)
         {
             Main.LOG.error("Failed to get JarEntry '%s' from mod JAR '%s'", entry.getName(), fileName);
             return null;
         }
+    }
 
-        return stream;
+    protected static void cleanupJarEntryInputStream(InputStream stream, JarEntry entry, String fileName)
+    {
+        try
+        {
+            stream.close();
+        }
+        catch (IOException e)
+        {
+            Main.LOG.error("Encountered an error while closing JarEntry '%s' from mod JAR '%s'", entry.getName(), fileName);
+        }
     }
 
     protected static Manifest findManifest(JarFile file, String fileName)

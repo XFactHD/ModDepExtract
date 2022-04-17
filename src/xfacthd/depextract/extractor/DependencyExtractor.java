@@ -7,19 +7,26 @@ import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.maven.artifact.versioning.*;
 import xfacthd.depextract.Main;
-import xfacthd.depextract.html.Css;
-import xfacthd.depextract.html.Html;
+import xfacthd.depextract.html.*;
 import xfacthd.depextract.util.*;
 
 import java.io.*;
 import java.util.*;
 import java.util.jar.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class DependencyExtractor extends DataExtractor
 {
     public static final String DEP_RESULT_FILE_NAME = "dependencies.html";
     private static final Comparator<ModEntry> ENTRY_COMPARATOR = (entryOne, entryTwo) -> compareModIDs(entryOne.modId(), entryTwo.modId());
     private static final Comparator<Dependency> DEP_COMPARATOR = (depOne, depTwo) -> compareModIDs(depOne.modId(), depTwo.modId());
+    private static final Dependency NULL_DEPENDENCY = new Dependency(null, null, false);
+    private static final DepResult NULL_RESULT = new DepResult(null, false, false, false);
+    private static final Attributes.Name AUTO_MOD_NAME = new Attributes.Name("Automatic-Module-Name");
+    private static final Attributes.Name IMPL_TITLE_NAME = new Attributes.Name("Implementation-Title");
+    private static final Attributes.Name IMPL_VER_NAME = new Attributes.Name("Implementation-Version");
+    private static final Pattern LANG_PROVIDER_NAME_PATTERN = Pattern.compile("public String name\\(\\) \\{\\R\s+return \"([a-z0-9_.-]+)\";\\R\s+}");
 
     private final Map<String, ModEntry> modEntries = new HashMap<>();
     private final Table<ModEntry, Dependency, DepResult> depResults = HashBasedTable.create(modEntries.size(), 4);
@@ -46,7 +53,7 @@ public class DependencyExtractor extends DataExtractor
     public void readOptions(OptionSet options)
     {
         this.mcVersion = options.valueOf(minecraftOpt);
-        this.forgeVersion = options.valueOf(forgeOpt);
+        this.forgeVersion = Utils.getForgeVersion(options.valueOf(forgeOpt));
     }
 
     @Override
@@ -56,10 +63,10 @@ public class DependencyExtractor extends DataExtractor
     public void acceptFile(String fileName, JarFile modJar)
     {
         JarEntry tomlEntry = modJar.getJarEntry("META-INF/mods.toml");
+        Manifest manifest = findManifest(modJar, fileName);
         if (tomlEntry != null)
         {
             InputStream tomlStream = getInputStreamForEntry(modJar, tomlEntry, fileName);
-            Manifest manifest = findManifest(modJar, fileName);
             if (tomlStream == null || manifest == null)
             {
                 Main.LOG.error("Encountered an error while retrieving metadata from mod JAR '%s'", fileName);
@@ -77,11 +84,21 @@ public class DependencyExtractor extends DataExtractor
                 Main.LOG.error("Failed to parse mod definition for mod JAR '%s'", fileName);
             }
 
+            cleanupJarEntryInputStream(tomlStream, tomlEntry, fileName);
+
             jarCount++;
         }
         else
         {
-            Main.LOG.warning("Mod definition not found in mod JAR '%s', skipping", fileName);
+            if (manifest != null && manifest.getMainAttributes().getValue("FMLModType").equals("LANGPROVIDER"))
+            {
+                parseLanguageProvider(fileName, modJar, manifest);
+                jarCount++;
+            }
+            else
+            {
+                Main.LOG.warning("Mod definition not found in mod JAR '%s', skipping", fileName);
+            }
         }
     }
 
@@ -94,6 +111,18 @@ public class DependencyExtractor extends DataExtractor
 
         for (ModEntry entry : modEntries.values())
         {
+            if (entry.modId().equals("minecraft") || entry.modId().equals("forge"))
+            {
+                // Don't add MC and Forge to the results
+                continue;
+            }
+
+            if (entry.dependencies().isEmpty())
+            {
+                depResults.put(entry, NULL_DEPENDENCY, NULL_RESULT);
+                continue;
+            }
+
             for (Dependency dep : entry.dependencies())
             {
                 ModEntry depMod = modEntries.get(dep.modId());
@@ -151,8 +180,14 @@ public class DependencyExtractor extends DataExtractor
                     body.println(String.format("Minecraft version: %s", mcVersion));
                     body.println(String.format("Forge version: %s-%s", mcVersion, forgeVersion));
                     body.println(String.format("Found %d mods in %d mod JARs", modCount, jarCount));
-                    body.print("All dependencies valid:");
-                    Html.writeBoolean(body, "", depResults.cellSet().stream().map(Table.Cell::getValue).filter(Objects::nonNull).allMatch(DepResult::valid));
+                    body.print("All dependencies satisfied:");
+                    boolean satisfied = depResults.cellSet()
+                            .stream()
+                            .map(Table.Cell::getValue)
+                            .filter(Objects::nonNull)
+                            .filter(res -> res != NULL_RESULT)
+                            .allMatch(DepResult::valid);
+                    Html.writeBoolean(body, "", satisfied);
                     body.print("<br><br>");
 
                     String tableAttrib = "class=\"mod_table\"";
@@ -170,7 +205,7 @@ public class DependencyExtractor extends DataExtractor
                                 Html.tableHeader(row, tableAttrib, "Required");
                                 Html.tableHeader(row, tableAttrib, "Installed");
                                 Html.tableHeader(row, tableAttrib, "In range");
-                                Html.tableHeader(row, tableAttrib, "Valid");
+                                Html.tableHeader(row, tableAttrib, "Satisfied");
 
                             }),
                             tbody -> depResults.rowKeySet().stream().sorted(ENTRY_COMPARATOR).forEachOrdered(entry ->
@@ -196,14 +231,15 @@ public class DependencyExtractor extends DataExtractor
                                     }
 
                                     DepResult result = deps.get(dep);
+                                    boolean nullResult = result == NULL_RESULT;
 
-                                    Html.tableCell(row, tableAttrib, dep.modId());
-                                    Html.tableCell(row, tableAttrib, dep.versionRange().toString());
-                                    Html.tableCell(row, tableAttrib, result.installedVersion());
-                                    Html.tableCell(row, tableAttrib, cell -> Html.writeBoolean(cell, "", dep.mandatory()));
-                                    Html.tableCell(row, tableAttrib, cell -> Html.writeBoolean(cell, "", result.installed()));
-                                    Html.tableCell(row, tableAttrib, cell -> Html.writeBoolean(cell, "", result.inRange()));
-                                    Html.tableCell(row, tableAttrib, cell -> Html.writeBoolean(cell, "", result.valid()));
+                                    Html.tableCell(row, tableAttrib, nullResult ? "" : dep.modId());
+                                    Html.tableCell(row, tableAttrib, nullResult ? "" : dep.versionRange().toString());
+                                    Html.tableCell(row, tableAttrib, nullResult ? "" : result.installedVersion());
+                                    Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, dep.mandatory(), nullResult));
+                                    Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, result.installed(), nullResult));
+                                    Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, result.inRange(), nullResult));
+                                    Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, result.valid(), nullResult));
                                 }));
                             })
                     );
@@ -215,11 +251,15 @@ public class DependencyExtractor extends DataExtractor
         Main.LOG.info("Dependency display built");
     }
 
+
+
     public int getModCount() { return modEntries.size() - hiddenModCount; }
 
     public String getMCVersion() { return mcVersion; }
 
     public String getForgeVersion() { return forgeVersion; }
+
+
 
     private static Map<String, ModEntry> parseModEntriesInFile(String fileName, InputStream tomlStream, Manifest manifest)
     {
@@ -228,7 +268,29 @@ public class DependencyExtractor extends DataExtractor
         Toml toml = new Toml().read(tomlStream);
 
         List<Map<String, Object>> mods = toml.getList("mods");
-        Toml deps = toml.getTable("dependencies");
+
+        Toml deps;
+        if (toml.containsTable("dependencies"))
+        {
+            deps = toml.getTable("dependencies");
+        }
+        else
+        {
+            if (toml.containsTableArray("dependencies"))
+            {
+                Main.LOG.warning("Mod definition in mod JAR '%s' declares 'dependencies' as a list instead of a table, this is invalid and will be skipped!", fileName);
+            }
+            else if (toml.contains("dependencies"))
+            {
+                Optional<Object> depOpt = toml.entrySet()
+                        .stream()
+                        .filter(entry -> entry.getKey().equals("dependencies"))
+                        .map(Map.Entry::getValue)
+                        .findFirst();
+                Main.LOG.warning("Mod definition in mod JAR '%s' declares 'dependencies' as '%s' instead of a table, this is invalid and will be skipped!", fileName, depOpt.orElseThrow().getClass());
+            }
+            deps = null;
+        }
 
         for (Map<String, Object> mod : mods)
         {
@@ -240,7 +302,7 @@ public class DependencyExtractor extends DataExtractor
             String version = (String) mod.get("version");
             if (version.equals("${file.jarVersion}"))
             {
-                version = manifest.getMainAttributes().getValue("Implementation-Version");
+                version = manifest.getMainAttributes().getValue(IMPL_VER_NAME);
             }
             if (version == null)
             {
@@ -292,6 +354,123 @@ public class DependencyExtractor extends DataExtractor
         }
     }
 
+    private void parseLanguageProvider(String fileName, JarFile modJar, Manifest manifest)
+    {
+        Attributes attrs = manifest.getMainAttributes();
+
+        String displayName;
+        if (attrs.containsKey(IMPL_TITLE_NAME))
+        {
+            displayName = attrs.getValue(IMPL_TITLE_NAME);
+        }
+        else
+        {
+            Main.LOG.warning("Can't determine name of language provider in JAR '%s', skipping", fileName);
+            return;
+        }
+
+        String providerName = null;
+        if (Decompiler.isDecompilerPresent())
+        {
+            providerName = getProviderNameFromDecomp(fileName, modJar);
+        }
+
+        // The name deduction without the decompiler is an ugly guess
+        if (providerName == null)
+        {
+            if (attrs.containsKey(AUTO_MOD_NAME))
+            {
+                providerName = attrs.getValue(AUTO_MOD_NAME);
+            }
+            else
+            {
+                providerName = displayName.toLowerCase(Locale.ROOT);
+            }
+        }
+
+        String version = "0.0";
+        if (attrs.containsKey(IMPL_VER_NAME))
+        {
+            version = attrs.getValue(IMPL_VER_NAME);
+        }
+
+        modEntries.put(providerName, new ModEntry(fileName, providerName, displayName, new DefaultArtifactVersion(version), List.of()));
+    }
+
+    private static String getProviderNameFromDecomp(String fileName, JarFile modJar)
+    {
+        JarEntry serviceEntry = modJar.getJarEntry("META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider");
+        if (serviceEntry == null)
+        {
+            Main.LOG.error("Language Provider in JAR '%s' doesn't contain an IModLanguageProvider service file, this is invalid", fileName);
+            return null;
+        }
+
+        String serviceClassName;
+        try
+        {
+            InputStream serviceStream = modJar.getInputStream(serviceEntry);
+            serviceClassName = new String(serviceStream.readAllBytes());
+            serviceStream.close();
+        }
+        catch (IOException e)
+        {
+            Main.LOG.error("Failed to read IModLanguageProvider service class name from JAR '%s'", fileName);
+            return null;
+        }
+
+        serviceClassName = serviceClassName.replace('.', '/').replaceAll("\\R", "");
+
+        if (!Decompiler.copyToInput(fileName, modJar, serviceClassName + ".class"))
+        {
+            Main.LOG.error("Failed to prepare JAR '%s' for decompilation");
+            return null;
+        }
+
+        JarFile decompJar = Decompiler.decompile(fileName);
+        if (decompJar == null)
+        {
+            Main.LOG.error("Failed to decompile JAR '%s'", fileName);
+            Decompiler.cleanup(fileName);
+            return null;
+        }
+
+        JarEntry serviceClass = decompJar.getJarEntry(serviceClassName + ".java");
+        if (serviceClass == null)
+        {
+            Main.LOG.error("Failed to find IModLanguageProvider service");
+            Decompiler.cleanup(fileName, decompJar);
+            return null;
+        }
+
+        String serviceCode;
+        try
+        {
+            InputStream serviceStream = decompJar.getInputStream(serviceClass);
+            serviceCode = new String(serviceStream.readAllBytes());
+            serviceStream.close();
+        }
+        catch (IOException e)
+        {
+            Main.LOG.error("Failed to read IModLanguageProvider service class code from decompiled JAR '%s'", fileName);
+            return null;
+        }
+        finally
+        {
+            Decompiler.cleanup(fileName, decompJar);
+        }
+
+        Matcher matcher = LANG_PROVIDER_NAME_PATTERN.matcher(serviceCode);
+        if (!matcher.find())
+        {
+            Main.LOG.error("Failed to find language provider name in service class code from decompiled JAR '%s'", fileName);
+            return null;
+        }
+
+        String result = matcher.group();
+        return result.substring(result.indexOf('\"') + 1, result.lastIndexOf('\"'));
+    }
+
     private void addDefaultMods()
     {
         modEntries.put("minecraft", new ModEntry("", "minecraft", "Minecraft", new DefaultArtifactVersion(mcVersion), Collections.emptyList()));
@@ -309,5 +488,17 @@ public class DependencyExtractor extends DataExtractor
         if (idTwo.equals("forge")) { return 1; }
 
         return idOne.compareTo(idTwo);
+    }
+
+    private static void printBooleanOrEmpty(HtmlWriter cell, boolean value, boolean hide)
+    {
+        if (hide)
+        {
+            cell.print("");
+        }
+        else
+        {
+            Html.writeBoolean(cell, "", value);
+        }
     }
 }
