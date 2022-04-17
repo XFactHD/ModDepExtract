@@ -23,13 +23,15 @@ Execute the built JAR from a command line interface with the following arguments
   - The given list most not contain spaces
   - optional, only available when `--extract_ats` is set
 - `--extract_mixins`: If true, Mixin configurations will be extracted from the mod JARs and listed per JAR in a separate `mixins.html` (optional)
-- `--mixin_decompiler`: Provide the path to a ForgeFlower decompiler JAR (optional)
-  - If not provided, a JAR with the name "forgeflower-1.5.498.29.jar" is expected to be in the applications run directory
+- `--extract_coremods`: If true, JS coremod configurations will be extracted from the mod JARs and listed per JAR in a separate `coremods.html` (optional)
+- `--decompiler_path`: Provide the path to a ForgeFlower decompiler JAR (optional)
+  - If not provided, a JAR with the name "forgeflower-1.5.498.29.jar" is expected to be in the application's run directory
   - Usage of FernFlower or other forks of FernFlower may or may not provide satisfactory results
   - If a custom path is provided but the JAR can't be found, a warning will be logged
-  - If the decompiler is not found, an info will be logged and the Mixin targets will not be resolved
-- `--extract_coremods`: If true, JS coremod configurations will be extracted from the mod JARs and listed per JAR in a separate `coremods.html` (optional)
+  - If the decompiler is not found, an info will be logged and the following features will not be available
+    - Retrieval of the correct internal name of language providers
+    - Mixin target deduction
 - `--dark`: Enable dark mode for the generated web page (optional)
 - `--open_result`: If true, the resulting web page will be opened automatically in the default browser (optional)
 
-The resulting `dependencies.html` and, if enabled, `accesstransformer.html` files will be created in the application run directory.
+The resulting `dependencies.html` and, if enabled with their respective arguments, `accesstransformers.html`, `mixins.html` and `coremods.html` files will be created in the application run directory.

@@ -26,7 +26,7 @@ public class Decompiler
 
     public static void registerOptions(OptionParser parser)
     {
-        decompilerPathOpt = parser.accepts("mixin_decompiler", "Path to the ForgeFlower decompiler JAR")
+        decompilerPathOpt = parser.accepts("decompiler_path", "Path to the ForgeFlower decompiler JAR")
                 .withOptionalArg()
                 .ofType(String.class)
                 .defaultsTo(DEFAULT_DECOMP_PATH);
