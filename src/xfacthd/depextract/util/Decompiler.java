@@ -3,17 +3,23 @@ package xfacthd.depextract.util;
 import com.google.common.base.Suppliers;
 import joptsimple.*;
 import xfacthd.depextract.Main;
+import xfacthd.depextract.log.Marker;
 
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Supplier;
+import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.zip.ZipOutputStream;
 
 public class Decompiler
 {
+    private static final Marker DECOMP_MARKER = new Marker("Decompiler");
     private static final String DEFAULT_DECOMP_PATH = "./forgeflower-1.5.498.29.jar";
+    private static final String DECOMP_IN_PATH = "./decomp_in";
+    private static final String DECOMP_OUT_PATH = "./decomp_out";
     private static OptionSpec<String> decompilerPathOpt = null;
     private static String decompPath = DEFAULT_DECOMP_PATH;
     private static final Supplier<Boolean> DECOMP_PRESENT = Suppliers.memoize(Decompiler::checkDecompilerPresent);
@@ -38,9 +44,9 @@ public class Decompiler
     {
         try
         {
-            Files.createDirectories(Path.of("./decomp_in"));
+            Files.createDirectories(Path.of(DECOMP_IN_PATH));
 
-            File jarFile = new File("decomp_in/" + fileName);
+            File jarFile = new File(DECOMP_IN_PATH + "/" + fileName);
 
             if (!jarFile.exists() && !jarFile.createNewFile())
             {
@@ -63,19 +69,40 @@ public class Decompiler
         }
     }
 
+    public static boolean copyToInput(String fileName, JarFile jar, String... fileFilter)
+    {
+        List<String> filters = fileFilter != null && fileFilter.length > 0 ? List.of(fileFilter) : List.of();
+        return writeInput(fileName, zipStream ->
+        {
+            List<JarEntry> entries = jar.stream()
+                    .filter(entry -> filters.isEmpty() || filters.contains(entry.getName()))
+                    .toList();
+
+            for (JarEntry entry : entries)
+            {
+                zipStream.putNextEntry(new JarEntry(entry));
+
+                InputStream stream = jar.getInputStream(entry);
+                zipStream.write(stream.readAllBytes());
+                stream.close();
+            }
+        });
+    }
+
     public static JarFile decompile(String fileName)
     {
         try
         {
-            Files.createDirectories(Path.of("./decomp_out"));
+            Files.createDirectories(Path.of(DECOMP_OUT_PATH));
 
-            Process decomp = new ProcessBuilder().command("java", "-jar", decompPath, "-nls=1", "./decomp_in/" + fileName, "./decomp_out").start();
+            Process decomp = new ProcessBuilder().command("java", "-jar", decompPath, "-nls=1", DECOMP_IN_PATH + "/" + fileName, DECOMP_OUT_PATH).start();
             InputStream stream = decomp.getInputStream();
             while (decomp.isAlive())
             {
                 if (stream.available() > 0)
                 {
-                    stream.readAllBytes();
+                    String output = new String(stream.readAllBytes());
+                    Main.LOG.debug(DECOMP_MARKER, "[Decompiler] %s", output);
                 }
             }
             if (decomp.waitFor() != 0)
@@ -91,7 +118,7 @@ public class Decompiler
             return null;
         }
 
-        File resultFile = new File("decomp_out/" + fileName);
+        File resultFile = new File(DECOMP_OUT_PATH + "/" + fileName);
         if (!resultFile.exists())
         {
             Main.LOG.error("Decompilation result archive not found for file '%s'", fileName);
@@ -121,8 +148,8 @@ public class Decompiler
                 }
             }
 
-            Files.deleteIfExists(Path.of("./decomp_in/" + fileName));
-            Files.deleteIfExists(Path.of("./decomp_out/" + fileName));
+            Files.deleteIfExists(Path.of(DECOMP_IN_PATH + "/" + fileName));
+            Files.deleteIfExists(Path.of(DECOMP_OUT_PATH + "/" + fileName));
         }
         catch (IOException e)
         {
