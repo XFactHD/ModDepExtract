@@ -34,9 +34,11 @@ public class Main
         OptionSpec<Boolean> openResultOpt = parser.accepts("open_result", "Automatically open the resulting web page in the standard browser")
                 .withOptionalArg()
                 .ofType(Boolean.class);
+        Decompiler.registerOptions(parser);
         extractors.forEach(extractor -> extractor.registerOptions(parser));
 
         OptionSet options = parser.parse(args);
+        Decompiler.readOptions(options);
         extractors.forEach(extractor -> extractor.readOptions(options));
         extractors = extractors.stream().filter(DataExtractor::isActive).toList();
 

@@ -8,19 +8,16 @@ import xfacthd.depextract.html.*;
 import xfacthd.depextract.util.*;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.jar.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.*;
-import java.util.zip.ZipOutputStream;
 
 public class MixinExtractor extends DataExtractor
 {
+    private static final String MIXIN_DECOMP_FILE_NAME = "mixins.jar";
     private static final String MIXIN_RESULT_FILE_NAME = "mixins.html";
-    private static final String DEFAULT_DECOMP_PATH = "./forgeflower-1.5.498.29.jar";
     private static final Pattern SIMPLE_PATTERN = Pattern.compile("@Mixin\\((.+)\\)");
     private static final Pattern COMPLEX_PATTERN = Pattern.compile("@Mixin\\(\\R(([ a-zA-Z_]+ = \\{?[a-zA-Z0-9./, $\"-]+}?,?\\R)+)\\)");
     private static final MixinTarget[] EMPTY_ARRAY = new MixinTarget[0];
@@ -28,9 +25,7 @@ public class MixinExtractor extends DataExtractor
 
     private final Map<String, List<MixinConfig>> mixinEntries = new HashMap<>();
     private OptionSpec<Boolean> extractMixinsOpt = null;
-    private OptionSpec<String> decompilerPathOpt = null;
     private boolean active = false;
-    private String decompPath = DEFAULT_DECOMP_PATH;
 
     @Override
     public void registerOptions(OptionParser parser)
@@ -38,23 +33,12 @@ public class MixinExtractor extends DataExtractor
         extractMixinsOpt = parser.accepts("extract_mixins", "Extract Mixin configs from mods")
                 .withOptionalArg()
                 .ofType(Boolean.class);
-
-        decompilerPathOpt = parser.accepts("mixin_decompiler", "Path to the ForgeFlower decompiler JAR")
-                .availableIf(extractMixinsOpt)
-                .withOptionalArg()
-                .ofType(String.class)
-                .defaultsTo(DEFAULT_DECOMP_PATH);
     }
 
     @Override
     public void readOptions(OptionSet options)
     {
         active = options.has(extractMixinsOpt) && options.valueOf(extractMixinsOpt);
-
-        if (active)
-        {
-            decompPath = options.valueOf(decompilerPathOpt);
-        }
     }
 
     @Override
@@ -126,21 +110,16 @@ public class MixinExtractor extends DataExtractor
             });
         });
 
+        Decompiler.cleanup(MIXIN_DECOMP_FILE_NAME, decompJar);
+
         Main.LOG.info("Mixin targets collected");
     }
 
+
+
     private JarFile decompileMixinClasses()
     {
-        if (!Files.exists(Path.of(decompPath)))
-        {
-            if (!decompPath.equals(DEFAULT_DECOMP_PATH))
-            {
-                Main.LOG.warning("Non-default decompiler path provided but decompiler was not found: '%s'", decompPath);
-            }
-            Main.LOG.info("Decompiler not found, skipping Mixin target resolve");
-
-            return null;
-        }
+        if (!Decompiler.isDecompilerPresent()) { return null; }
 
         Map<String, byte[]> mixinClasses = mixinEntries.values()
                 .stream()
@@ -154,75 +133,27 @@ public class MixinExtractor extends DataExtractor
                 ))
                 .collect(Collectors.toMap(entry -> entry.classPath().replace('.', '/'), MixinEntry::classFile));
 
-        try
+        boolean success = Decompiler.writeInput(MIXIN_DECOMP_FILE_NAME, zipStream ->
         {
-            Files.createDirectories(Path.of("./decomp_in"));
-            File jarFile = new File("decomp_in/mixins.jar");
-
-            if (!jarFile.exists() && !jarFile.createNewFile())
-            {
-                return null;
-            }
-
-            FileOutputStream fileStream = new FileOutputStream(jarFile);
-            ZipOutputStream zipStream = new ZipOutputStream(fileStream);
-
             for (Map.Entry<String, byte[]> entry : mixinClasses.entrySet())
             {
                 zipStream.putNextEntry(new JarEntry(entry.getKey() + ".class"));
                 zipStream.write(entry.getValue());
             }
+        });
 
-            zipStream.close();
-        }
-        catch (IOException e)
+        if (!success)
         {
             Main.LOG.error("Encountered an error while building archive of collected Mixins");
             return null;
         }
 
-        try
+        JarFile result = Decompiler.decompile(MIXIN_DECOMP_FILE_NAME);
+        if (result == null)
         {
-            Files.createDirectories(Path.of("./decomp_out"));
-
-            Process decomp = new ProcessBuilder().command("java", "-jar", decompPath, "-nls=1", "./decomp_in/mixins.jar", "./decomp_out").start();
-            InputStream stream = decomp.getInputStream();
-            while (decomp.isAlive())
-            {
-                if (stream.available() > 0)
-                {
-                    stream.readAllBytes();
-                }
-            }
-            if (decomp.waitFor() != 0)
-            {
-                Main.LOG.error("Decompiler exited with non-zero exit code '%d'", decomp.exitValue());
-                return null;
-            }
+            Main.LOG.error("Decompilation of collected Mixins failed");
         }
-        catch (IOException | InterruptedException e)
-        {
-            Main.LOG.error("Encountered an error while decompiling collected Mixins");
-            e.printStackTrace();
-            return null;
-        }
-
-        File resultFile = new File("decomp_out/mixins.jar");
-        if (!resultFile.exists())
-        {
-            Main.LOG.error("Mixin decompilation result archive not found");
-            return null;
-        }
-
-        try
-        {
-            return new JarFile(resultFile);
-        }
-        catch (IOException e)
-        {
-            Main.LOG.error("Failed to create JarFile for Mixin decompilation result archive");
-            return null;
-        }
+        return result;
     }
 
     private MixinTarget[] resolveTargets(JarFile decompJar, String classPath)
