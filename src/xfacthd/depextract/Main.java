@@ -88,6 +88,7 @@ public class Main
 
                 JarFile modJar = new JarFile(modFile);
                 extractors.forEach(extractor -> extractor.acceptFile(modFile.getName(), modJar));
+                modJar.close();
             }
             catch (IOException e)
             {

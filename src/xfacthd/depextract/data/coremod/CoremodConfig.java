@@ -1,4 +1,4 @@
-package xfacthd.depextract.util;
+package xfacthd.depextract.data.coremod;
 
 import com.google.gson.JsonObject;
 import org.apache.commons.lang3.tuple.Pair;

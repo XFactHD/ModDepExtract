@@ -5,6 +5,7 @@ import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.commons.lang3.tuple.Pair;
 import xfacthd.depextract.Main;
+import xfacthd.depextract.data.coremod.CoremodConfig;
 import xfacthd.depextract.html.Css;
 import xfacthd.depextract.html.Html;
 import xfacthd.depextract.util.*;
@@ -50,6 +51,7 @@ public class CoremodExtractor extends DataExtractor
         if (cmStream == null) { return; }
 
         JsonElement cmElem = GSON.fromJson(new InputStreamReader(cmStream), JsonObject.class);
+        cleanupJarEntryInputStream(cmStream, cmEntry, fileName);
         if (!cmElem.isJsonObject())
         {
             Main.LOG.error("Encountered invalid coremods config in mod JAR '%s'", fileName);

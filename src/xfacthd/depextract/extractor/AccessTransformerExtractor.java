@@ -3,6 +3,7 @@ package xfacthd.depextract.extractor;
 import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import xfacthd.depextract.Main;
+import xfacthd.depextract.data.accesstransformer.AccessTransformer;
 import xfacthd.depextract.html.Css;
 import xfacthd.depextract.html.Html;
 import xfacthd.depextract.util.*;

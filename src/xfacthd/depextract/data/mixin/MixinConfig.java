@@ -1,9 +1,10 @@
-package xfacthd.depextract.util;
+package xfacthd.depextract.data.mixin;
 
 import com.google.gson.*;
 import xfacthd.depextract.Main;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -83,7 +84,10 @@ public record MixinConfig(String name, String compatLevel, String plugin,
 
         try
         {
-            return modJar.getInputStream(entry).readAllBytes();
+            InputStream stream = modJar.getInputStream(entry);
+            byte[] result = stream.readAllBytes();
+            stream.close();
+            return result;
         }
         catch (IOException e)
         {

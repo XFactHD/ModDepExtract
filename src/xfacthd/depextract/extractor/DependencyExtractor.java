@@ -7,6 +7,7 @@ import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.maven.artifact.versioning.*;
 import xfacthd.depextract.Main;
+import xfacthd.depextract.data.dependency.*;
 import xfacthd.depextract.html.*;
 import xfacthd.depextract.util.*;
 

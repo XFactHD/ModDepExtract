@@ -1,4 +1,4 @@
-package xfacthd.depextract.util;
+package xfacthd.depextract.data.accesstransformer;
 
 import xfacthd.depextract.html.Html;
 import xfacthd.depextract.html.HtmlWriter;

@@ -1,4 +1,4 @@
-package xfacthd.depextract.util;
+package xfacthd.depextract.data.dependency;
 
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 

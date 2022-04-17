@@ -4,6 +4,7 @@ import com.google.gson.*;
 import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import xfacthd.depextract.Main;
+import xfacthd.depextract.data.mixin.*;
 import xfacthd.depextract.html.*;
 import xfacthd.depextract.util.*;
 
@@ -68,6 +69,7 @@ public class MixinExtractor extends DataExtractor
             if (mixinStream == null) { continue; }
 
             JsonElement mixinElem = GSON.fromJson(new InputStreamReader(mixinStream), JsonObject.class);
+            cleanupJarEntryInputStream(mixinStream, configEntry, fileName);
             if (!mixinElem.isJsonObject())
             {
                 Main.LOG.error("Encountered invalid Mixin config '%s' in mod JAR '%s'", configName, fileName);
@@ -170,7 +172,9 @@ public class MixinExtractor extends DataExtractor
         String mixinCode;
         try
         {
-            mixinCode = new String(decompJar.getInputStream(entry).readAllBytes());
+            InputStream stream = decompJar.getInputStream(entry);
+            mixinCode = new String(stream.readAllBytes());
+            stream.close();
         }
         catch (IOException e)
         {
