@@ -91,13 +91,17 @@ public class CoremodExtractor extends DataExtractor
                 head ->
                 {
                     Html.element(head, "title", "", "Coremod Dump");
-                    Html.style(head, style -> Css.declareClass(style, "mod_table", clazz ->
+                    Html.style(head, style ->
                     {
-                        Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
-                        Css.property(clazz, "border-collapse", "collapse");
-                        Css.property(clazz, "padding", "4px");
-                        Css.property(clazz, "vertical-align", "top");
-                    }));
+                        Css.declareSelector(style, ".mod_table", clazz ->
+                        {
+                            Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
+                            Css.property(clazz, "border-collapse", "collapse");
+                            Css.property(clazz, "padding", "4px");
+                            Css.property(clazz, "vertical-align", "top");
+                        });
+                        Css.declareStickyHeader(style, darkMode);
+                    });
                 },
                 body ->
                 {

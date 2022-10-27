@@ -116,7 +116,7 @@ public class AccessTransformerExtractor extends DataExtractor
                     Html.element(head, "title", "", "AccessTransformer Dump");
                     Html.style(head, style ->
                     {
-                        Css.declareClass(style, "mod_table", clazz ->
+                        Css.declareSelector(style, ".mod_table", clazz ->
                         {
                             Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
                             Css.property(clazz, "border-collapse", "collapse");
@@ -124,7 +124,8 @@ public class AccessTransformerExtractor extends DataExtractor
                             Css.property(clazz, "vertical-align", "top");
                         });
 
-                        Css.declareClass(style, "at_entry", clazz -> Css.property(clazz, "font-family", "'Courier New', monospace"));
+                        Css.declareSelector(style, ".at_entry", clazz -> Css.property(clazz, "font-family", "'Courier New', monospace"));
+                        Css.declareStickyHeader(style, darkMode);
                     });
                 },
                 body ->

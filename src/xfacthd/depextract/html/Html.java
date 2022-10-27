@@ -52,8 +52,8 @@ public final class Html
     {
         element(writer, "table", attribs, table ->
         {
-            element(writer, "thead", "", headWriter);
-            element(writer, "tbody", "", bodyWriter);
+            element(table, "thead", "", headWriter);
+            element(table, "tbody", "", bodyWriter);
         });
     }
 
@@ -84,8 +84,7 @@ public final class Html
 
     public static void writeBoolean(HtmlWriter writer, String attribs, boolean value)
     {
-        if (!attribs.isEmpty()) { attribs += " "; }
-        attribs += getBoolColor(value);
+        attribs = appendAttribs(attribs, getBoolColor(value));
         element(writer, "span", attribs, value ? "true" : "false");
     }
 
@@ -98,6 +97,12 @@ public final class Html
     {
         return text.replace("<", "&lt;")
                    .replace(">", "&gt;");
+    }
+
+    public static String appendAttribs(String attribs, String append)
+    {
+        if (!attribs.isEmpty()) { attribs += " "; }
+        return attribs + append;
     }
 
 

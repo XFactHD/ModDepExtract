@@ -27,10 +27,10 @@ public class DependencyExtractor extends DataExtractor
     private static final Attributes.Name AUTO_MOD_NAME = new Attributes.Name("Automatic-Module-Name");
     private static final Attributes.Name IMPL_TITLE_NAME = new Attributes.Name("Implementation-Title");
     private static final Attributes.Name IMPL_VER_NAME = new Attributes.Name("Implementation-Version");
-    private static final Pattern LANG_PROVIDER_NAME_PATTERN = Pattern.compile("public String name\\(\\) \\{\\R\s+return \"([a-z0-9_.-]+)\";\\R\s+}");
+    private static final Pattern LANG_PROVIDER_NAME_PATTERN = Pattern.compile("public String name\\(\\) \\{\\R\s+return \"([a-z\\d_.-]+)\";\\R\s+}");
 
     private final Map<String, ModEntry> modEntries = new HashMap<>();
-    private final Table<ModEntry, Dependency, DepResult> depResults = HashBasedTable.create(modEntries.size(), 4);
+    private final Table<ModEntry, Dependency, DepResult> depResults = HashBasedTable.create(0, 4);
     private OptionSpec<String> minecraftOpt = null;
     private OptionSpec<String> forgeOpt = null;
     private OptionSpec<Boolean> onlyUnsatisfiedOpt = null;
@@ -105,7 +105,7 @@ public class DependencyExtractor extends DataExtractor
         }
         else
         {
-            if (manifest != null && manifest.getMainAttributes().getValue("FMLModType").equals("LANGPROVIDER"))
+            if (compareManifestEntry(manifest, "FMLModType", "LANGPROVIDER"))
             {
                 parseLanguageProvider(fileName, modJar, manifest);
                 jarCount++;
@@ -200,13 +200,17 @@ public class DependencyExtractor extends DataExtractor
                 head ->
                 {
                     Html.element(head, "title", "", "Mod Dependency Analysis");
-                    Html.style(head, style -> Css.declareClass(style, "mod_table", clazz ->
+                    Html.style(head, style ->
                     {
-                        Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
-                        Css.property(clazz, "border-collapse", "collapse");
-                        Css.property(clazz, "padding", "4px");
-                        Css.property(clazz, "vertical-align", "top");
-                    }));
+                        Css.declareSelector(style, ".mod_table", clazz ->
+                        {
+                            Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
+                            Css.property(clazz, "border-collapse", "collapse");
+                            Css.property(clazz, "padding", "4px");
+                            Css.property(clazz, "vertical-align", "top");
+                        });
+                        Css.declareStickyHeader(style, darkMode);
+                    });
                 },
                 body ->
                 {
@@ -355,13 +359,13 @@ public class DependencyExtractor extends DataExtractor
             parseDependencies(deps, modId, dependencies);
 
             String version = (String) mod.get("version");
-            if (version.equals("${file.jarVersion}"))
+            if (version != null && version.equals("${file.jarVersion}"))
             {
                 version = manifest.getMainAttributes().getValue(IMPL_VER_NAME);
             }
             if (version == null)
             {
-                version = "0.0";
+                version = "0.0NONE";
             }
 
             ModEntry entry = new ModEntry(
@@ -543,6 +547,15 @@ public class DependencyExtractor extends DataExtractor
         if (idTwo.equals("forge")) { return 1; }
 
         return idOne.compareTo(idTwo);
+    }
+
+    @SuppressWarnings("SameParameterValue")
+    private static boolean compareManifestEntry(Manifest manifest, String key, String target)
+    {
+        if (manifest == null) { return false; }
+
+        String value = manifest.getMainAttributes().getValue(key);
+        return value != null && value.equals(target);
     }
 
     private static void printBooleanOrEmpty(HtmlWriter cell, boolean value, boolean hide)

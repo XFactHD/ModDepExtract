@@ -20,7 +20,7 @@ public class MixinExtractor extends DataExtractor
     private static final String MIXIN_DECOMP_FILE_NAME = "mixins.jar";
     private static final String MIXIN_RESULT_FILE_NAME = "mixins.html";
     private static final Pattern SIMPLE_PATTERN = Pattern.compile("@Mixin\\((.+)\\)");
-    private static final Pattern COMPLEX_PATTERN = Pattern.compile("@Mixin\\(\\R(([ a-zA-Z_]+ = \\{?[a-zA-Z0-9./, $\"-]+}?,?\\R)+)\\)");
+    private static final Pattern COMPLEX_PATTERN = Pattern.compile("@Mixin\\(\\R(([ a-zA-Z_]+ = \\{?[a-zA-Z\\d./, $\"-]+}?,?\\R)+)\\)");
     private static final MixinTarget[] EMPTY_ARRAY = new MixinTarget[0];
     private static final Gson GSON = new Gson();
 
@@ -257,7 +257,7 @@ public class MixinExtractor extends DataExtractor
 
     private String findQualifiedName(String classPath, String imports, String target)
     {
-        Pattern pattern = Pattern.compile("import [a-zA-Z0-9._]+\\." + target + ";");
+        Pattern pattern = Pattern.compile("import [a-zA-Z\\d._]+\\." + target + ";");
         Matcher matcher = pattern.matcher(imports);
         if (matcher.find())
         {
@@ -287,13 +287,17 @@ public class MixinExtractor extends DataExtractor
                 head ->
                 {
                     Html.element(head, "title", "", "Mixin Dump");
-                    Html.style(head, style -> Css.declareClass(style, "mod_table", clazz ->
+                    Html.style(head, style ->
                     {
-                        Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
-                        Css.property(clazz, "border-collapse", "collapse");
-                        Css.property(clazz, "padding", "4px");
-                        Css.property(clazz, "vertical-align", "top");
-                    }));
+                        Css.declareSelector(style, ".mod_table", clazz ->
+                        {
+                            Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
+                            Css.property(clazz, "border-collapse", "collapse");
+                            Css.property(clazz, "padding", "4px");
+                            Css.property(clazz, "vertical-align", "top");
+                        });
+                        Css.declareStickyHeader(style, darkMode);
+                    });
                 },
                 body ->
                 {
