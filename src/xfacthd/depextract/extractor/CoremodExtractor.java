@@ -3,7 +3,6 @@ package xfacthd.depextract.extractor;
 import com.google.gson.*;
 import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
-import org.apache.commons.lang3.tuple.Pair;
 import xfacthd.depextract.Main;
 import xfacthd.depextract.data.coremod.CoremodConfig;
 import xfacthd.depextract.html.Css;
@@ -61,6 +60,12 @@ public class CoremodExtractor extends DataExtractor
         CoremodConfig config = CoremodConfig.fromJson(cmElem.getAsJsonObject());
         if (!config.coremods().isEmpty())
         {
+            config.coremods().forEach((name, path) ->
+            {
+                JarEntry jsEntry = modJar.getJarEntry(path);
+                config.jsPresent().put(name, jsEntry != null);
+            });
+
             coremodEntries.put(fileName, config);
         }
     }
@@ -115,18 +120,20 @@ public class CoremodExtractor extends DataExtractor
                                 Html.element(thead, "tr", tableAttrib, row ->
                                 {
                                     Html.tableHeader(row, tableAttrib + " rowspan=\"2\"", "Mod file (Coremod count)");
-                                    Html.tableHeader(row, tableAttrib + " colspan=\"2\"", "Coremods");
+                                    Html.tableHeader(row, tableAttrib + " colspan=\"3\"", "Coremods");
                                 });
 
                                 Html.element(thead, "tr", tableAttrib, row ->
                                 {
                                     Html.tableHeader(row, tableAttrib, "Name");
                                     Html.tableHeader(row, tableAttrib, "Path");
+                                    Html.tableHeader(row, tableAttrib, "JS present");
                                 });
                             },
                             tbody -> coremodEntries.keySet().stream().sorted(String::compareToIgnoreCase).forEachOrdered(fileName ->
                             {
-                                Map<String, Pair<String, String>> coremods = coremodEntries.get(fileName).coremods();
+                                CoremodConfig cfg = coremodEntries.get(fileName);
+                                Map<String, String> coremods = cfg.coremods();
                                 coremods.keySet().forEach(entry -> Html.tableRow(tbody, tableAttrib, row ->
                                 {
                                     if (!fileName.equals(lastCoremodOwner.getValue()))
@@ -141,9 +148,10 @@ public class CoremodExtractor extends DataExtractor
                                         );
                                     }
 
-                                    Pair<String, String> coremod = coremods.get(entry);
-                                    Html.tableCell(row, tableAttrib, coremod.getLeft());
-                                    Html.tableCell(row, tableAttrib, coremod.getRight());
+                                    Html.tableCell(row, tableAttrib, entry);
+                                    Html.tableCell(row, tableAttrib, coremods.get(entry));
+                                    boolean present = cfg.jsPresent().get(entry);
+                                    Html.tableCell(row, tableAttrib, cell -> Html.writeBoolean(cell, "", present));
                                 }));
                             }));
                 }
