@@ -13,6 +13,11 @@ public record AccessTransformer(Target type, String modifier, String targetClass
     private static final String COLOR_PRIMITIVE = "#5390ba";
     private static final String COLOR_TYPE = "#ffc66d";
 
+    public String target()
+    {
+        return type.toString() + "_" + targetClass + "_" + targetName + "_" + targetDescriptor;
+    }
+
     public void toHtml(HtmlWriter writer)
     {
         Html.span(writer, style(COLOR_MODIFIER), modifier);

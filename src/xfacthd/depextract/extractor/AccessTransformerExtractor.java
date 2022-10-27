@@ -135,13 +135,18 @@ public class AccessTransformerExtractor extends DataExtractor
                             .stream()
                             .mapToLong(List::size)
                             .sum();
+                    long unique = atEntries.values()
+                            .stream()
+                            .flatMap(List::stream)
+                            .filter(Utils.customDistinct(AccessTransformer::target))
+                            .count();
                     long flagged = atEntries.values()
                             .stream()
                             .flatMap(List::stream)
                             .filter(AccessTransformer::flagged)
                             .count();
 
-                    body.println(String.format("Found %d AccessTransformer entries in %d out of %d mods.", count, atEntries.size(), modCount));
+                    body.println(String.format("Found %d AccessTransformer entries (%d unique entries) in %d out of %d mods.", count, unique, atEntries.size(), modCount));
                     body.print("Found");
                     Html.span(body, Html.getBoolColor(flagged == 0), Long.toString(flagged));
                     body.println("flagged AccessTransformer entries.<br>");

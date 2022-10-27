@@ -4,6 +4,10 @@ import xfacthd.depextract.Main;
 
 import java.io.*;
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 public class Utils
 {
@@ -47,6 +51,12 @@ public class Utils
         }
 
         return writer;
+    }
+
+    public static <T> Predicate<T> customDistinct(Function<T, Object> keyExtractor)
+    {
+        Set<Object> seen = ConcurrentHashMap.newKeySet();
+        return t -> seen.add(keyExtractor.apply(t));
     }
 
     public static void openFileInDefaultSoftware(String fileName)
