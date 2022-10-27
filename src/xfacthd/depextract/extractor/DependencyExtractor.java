@@ -33,8 +33,12 @@ public class DependencyExtractor extends DataExtractor
     private final Table<ModEntry, Dependency, DepResult> depResults = HashBasedTable.create(modEntries.size(), 4);
     private OptionSpec<String> minecraftOpt = null;
     private OptionSpec<String> forgeOpt = null;
+    private OptionSpec<Boolean> onlyUnsatisfiedOpt = null;
+    private OptionSpec<Boolean> onlySatisfiedOpt = null;
     private String mcVersion = "";
     private String forgeVersion = "";
+    private boolean onlyUnsatisfied = false;
+    private boolean onlySatisfied = false;
     private int jarCount = 0;
     private int hiddenModCount = 0;
 
@@ -48,6 +52,14 @@ public class DependencyExtractor extends DataExtractor
         forgeOpt = parser.accepts("forge", "The version of Forge being used")
                 .withRequiredArg()
                 .ofType(String.class);
+
+        onlySatisfiedOpt = parser.accepts("onlySatisfied", "If true, only mods with all dependencies satisfed will be printed")
+                .withRequiredArg()
+                .ofType(Boolean.class);
+
+        onlyUnsatisfiedOpt = parser.accepts("onlyUnsatisfied", "If true, only mods with at least one unsatisfied dependency will be printed")
+                .withRequiredArg()
+                .ofType(Boolean.class);
     }
 
     @Override
@@ -55,6 +67,8 @@ public class DependencyExtractor extends DataExtractor
     {
         this.mcVersion = options.valueOf(minecraftOpt);
         this.forgeVersion = Utils.getForgeVersion(options.valueOf(forgeOpt));
+        this.onlySatisfied = options.has(onlySatisfiedOpt) && options.valueOf(onlySatisfiedOpt);
+        this.onlyUnsatisfied = options.has(onlyUnsatisfiedOpt) && options.valueOf(onlyUnsatisfiedOpt);
     }
 
     @Override
@@ -145,6 +159,26 @@ public class DependencyExtractor extends DataExtractor
             }
         }
 
+        if (onlySatisfied || onlyUnsatisfied)
+        {
+            Iterator<ModEntry> it = depResults.rowKeySet().iterator();
+            while (it.hasNext())
+            {
+                ModEntry entry = it.next();
+                boolean allSatisfied = depResults.rowMap()
+                        .get(entry)
+                        .values()
+                        .stream()
+                        .filter(res -> onlySatisfied || res != NULL_RESULT)
+                        .allMatch(DepResult::valid);
+
+                if ((onlySatisfied && !allSatisfied) || (onlyUnsatisfied && allSatisfied))
+                {
+                    it.remove();
+                }
+            }
+        }
+
         Main.LOG.info("Dependencies validated");
     }
 
@@ -181,6 +215,18 @@ public class DependencyExtractor extends DataExtractor
                     body.println(String.format("Minecraft version: %s", mcVersion));
                     body.println(String.format("Forge version: %s-%s", mcVersion, forgeVersion));
                     body.println(String.format("Found %d mods in %d mod JARs", modCount, jarCount));
+
+                    if (onlySatisfied)
+                    {
+                        int satCount = depResults.rowKeySet().size();
+                        body.println(String.format("Only showing mods with satisfied dependencies (%d out of %d mods)", satCount, modCount));
+                    }
+                    else if (onlyUnsatisfied)
+                    {
+                        int unsatCount = depResults.rowKeySet().size();
+                        body.println(String.format("Only showing mods with unsatisfied dependencies (%d out of %d mods)", unsatCount, modCount));
+                    }
+
                     body.print("All dependencies satisfied:");
                     boolean satisfied = depResults.cellSet()
                             .stream()
@@ -234,9 +280,17 @@ public class DependencyExtractor extends DataExtractor
                                     DepResult result = deps.get(dep);
                                     boolean nullResult = result == NULL_RESULT;
 
+                                    String installedVersion = result.installedVersion();
+                                    String installedAttrib = tableAttrib;
+                                    if (!nullResult && installedVersion.equals("0.0NONE"))
+                                    {
+                                        installedVersion = Html.escape("<invalid>");
+                                        installedAttrib = String.format("%s %s", tableAttrib, Html.getBoolColor(false));
+                                    }
+
                                     Html.tableCell(row, tableAttrib, nullResult ? "" : dep.modId());
                                     Html.tableCell(row, tableAttrib, nullResult ? "" : dep.versionRange().toString());
-                                    Html.tableCell(row, tableAttrib, nullResult ? "" : result.installedVersion());
+                                    Html.tableCell(row, installedAttrib, nullResult ? "" : installedVersion);
                                     Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, dep.mandatory(), nullResult));
                                     Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, result.installed(), nullResult));
                                     Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, result.inRange(), nullResult));

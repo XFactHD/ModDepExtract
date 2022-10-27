@@ -16,6 +16,8 @@ Execute the built JAR from a command line interface with the following arguments
 - `--minecraft`: The Minecraft version the mods are run with
 - `--forge`: The Forge version the mods are run with
 - `--directory`: The game directory as configured in the official launcher. The "mods" folder is expected to exist in this directory
+- `--onlySatisfied`: If true, only mods where all dependencies are satisfied will be listed in the results
+- `--onlyUnsatisfied`: If true, only mods where at least one dependency is not satisfied will be listed in the results
 - `--extract_ats`: If true, AccessTransformer configurations will be extracted from the mod JARs and listed per JAR in a separate `accesstransformers.html` (optional)
 - `--flagged_ats`:
   - Comma-separated list of simplified AT targets (method or field name without enclosing class, simple class name without package)
