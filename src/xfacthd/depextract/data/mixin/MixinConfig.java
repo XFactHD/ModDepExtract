@@ -6,14 +6,25 @@ import xfacthd.depextract.Main;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.stream.StreamSupport;
 
-public record MixinConfig(String name, String compatLevel, String plugin,
-                          List<MixinEntry> mixins, List<MixinEntry> clientMixins, List<MixinEntry> serverMixins,
-                          List<Mixin> resolvedMixins, List<Mixin> resolvedClientMixins, List<Mixin> resolvedServerMixins
+public record MixinConfig(
+        String name, String compatLevel, String plugin,
+        List<MixinEntry> mixins, List<MixinEntry> clientMixins, List<MixinEntry> serverMixins,
+        List<Mixin> resolvedMixins, List<Mixin> resolvedClientMixins, List<Mixin> resolvedServerMixins
 )
 {
+    private MixinConfig(
+            String name, String compatLevel, String plugin, List<MixinEntry> mixins,
+            List<MixinEntry> clientMixins, List<MixinEntry> serverMixins
+    )
+    {
+        this(name, compatLevel, plugin, mixins, clientMixins, serverMixins, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+    }
+
     public int mixinCount() { return mixins.size() + clientMixins.size() + serverMixins.size(); }
 
 
@@ -26,21 +37,21 @@ public record MixinConfig(String name, String compatLevel, String plugin,
         if (obj.has("mixins"))
         {
             JsonArray mixinArr = obj.getAsJsonArray("mixins");
-            mixinArr.forEach(entry -> extractMixin(mixins, modJar, mixinPackage, entry));
+            streamDistinctMixins(mixinArr, entry -> extractMixin(mixins, modJar, mixinPackage, entry));
         }
 
         List<MixinEntry> clientMixins = new ArrayList<>();
         if (obj.has("client"))
         {
             JsonArray mixinArr = obj.getAsJsonArray("client");
-            mixinArr.forEach(entry -> extractMixin(clientMixins, modJar, mixinPackage, entry));
+            streamDistinctMixins(mixinArr, entry -> extractMixin(clientMixins, modJar, mixinPackage, entry));
         }
 
         List<MixinEntry> serverMixins = new ArrayList<>();
         if (obj.has("server"))
         {
             JsonArray mixinArr = obj.getAsJsonArray("server");
-            mixinArr.forEach(entry -> extractMixin(serverMixins, modJar, mixinPackage, entry));
+            streamDistinctMixins(mixinArr, entry -> extractMixin(serverMixins, modJar, mixinPackage, entry));
         }
 
         return new MixinConfig(
@@ -49,11 +60,14 @@ public record MixinConfig(String name, String compatLevel, String plugin,
                 obj.has("plugin") ? removePackage(obj.get("plugin").getAsString()) : "None",
                 mixins,
                 clientMixins,
-                serverMixins,
-                new ArrayList<>(),
-                new ArrayList<>(),
-                new ArrayList<>()
+                serverMixins
         );
+    }
+
+    private static void streamDistinctMixins(JsonArray mixins, Consumer<JsonElement> consumer)
+    {
+        // Guard against Mixin configs listing a Mixin multiple times
+        StreamSupport.stream(mixins.spliterator(), false).distinct().forEach(consumer);
     }
 
     private static void extractMixin(List<MixinEntry> mixins, JarFile modJar, String mixinPackage, JsonElement entry)
