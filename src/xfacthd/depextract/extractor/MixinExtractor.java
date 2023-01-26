@@ -46,7 +46,7 @@ public class MixinExtractor extends DataExtractor
     public boolean isActive() { return active; }
 
     @Override
-    public void acceptFile(String fileName, JarFile modJar)
+    public void acceptFile(String fileName, JarFile modJar, boolean jij)
     {
         Manifest manifest = findManifest(modJar, fileName);
         if (manifest == null) { return; }

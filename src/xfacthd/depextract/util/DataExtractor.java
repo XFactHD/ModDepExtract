@@ -16,7 +16,7 @@ public abstract class DataExtractor
 
     public abstract boolean isActive();
 
-    public abstract void acceptFile(String fileName, JarFile modJar);
+    public abstract void acceptFile(String fileName, JarFile modJar, boolean jij);
 
     public abstract void postProcessData();
 

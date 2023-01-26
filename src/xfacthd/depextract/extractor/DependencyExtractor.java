@@ -75,7 +75,7 @@ public class DependencyExtractor extends DataExtractor
     public boolean isActive() { return true; }
 
     @Override
-    public void acceptFile(String fileName, JarFile modJar)
+    public void acceptFile(String fileName, JarFile modJar, boolean jij)
     {
         JarEntry tomlEntry = modJar.getJarEntry("META-INF/mods.toml");
         Manifest manifest = findManifest(modJar, fileName);
@@ -88,7 +88,7 @@ public class DependencyExtractor extends DataExtractor
                 return;
             }
 
-            Map<String, ModEntry> entries = parseModEntriesInFile(fileName, tomlStream, manifest);
+            Map<String, ModEntry> entries = parseModEntriesInFile(fileName, tomlStream, manifest, jij);
             if (!entries.isEmpty())
             {
                 modEntries.putAll(entries);
@@ -107,10 +107,28 @@ public class DependencyExtractor extends DataExtractor
         {
             if (compareManifestEntry(manifest, "FMLModType", "LANGPROVIDER"))
             {
-                parseLanguageProvider(fileName, modJar, manifest);
+                parseLanguageProvider(fileName, modJar, manifest, jij);
                 jarCount++;
             }
-            else
+            else if (compareManifestEntry(manifest, "FMLModType", "GAMELIBRARY") || compareManifestEntry(manifest, "FMLModType", "LIBRARY"))
+            {
+                String name = fileName.toLowerCase(Locale.ROOT);
+                String version = "NONE";
+
+                Attributes attribs = manifest.getMainAttributes();
+                if (attribs.containsKey(IMPL_TITLE_NAME))
+                {
+                    name = attribs.getValue(IMPL_TITLE_NAME);
+                }
+                if (attribs.containsKey(IMPL_VER_NAME))
+                {
+                    version = attribs.getValue(IMPL_VER_NAME);
+                }
+
+                modEntries.put(fileName, new ModEntry(fileName, name, name, new DefaultArtifactVersion(version), List.of(), jij));
+                jarCount++;
+            }
+            else if (!jij) // Ignore JiJed JARs without mod metadata, distinguishing mods from other libs is basically impossible
             {
                 Main.LOG.warning("Mod definition not found in mod JAR '%s', skipping", fileName);
             }
@@ -320,7 +338,7 @@ public class DependencyExtractor extends DataExtractor
 
 
 
-    private static Map<String, ModEntry> parseModEntriesInFile(String fileName, InputStream tomlStream, Manifest manifest)
+    private static Map<String, ModEntry> parseModEntriesInFile(String fileName, InputStream tomlStream, Manifest manifest, boolean jij)
     {
         Map<String, ModEntry> modList = new HashMap<>();
 
@@ -373,7 +391,8 @@ public class DependencyExtractor extends DataExtractor
                     modId,
                     (String) mod.get("displayName"),
                     new DefaultArtifactVersion(version),
-                    dependencies
+                    dependencies,
+                    jij
             );
             modList.put(modId, entry);
         }
@@ -413,7 +432,7 @@ public class DependencyExtractor extends DataExtractor
         }
     }
 
-    private void parseLanguageProvider(String fileName, JarFile modJar, Manifest manifest)
+    private void parseLanguageProvider(String fileName, JarFile modJar, Manifest manifest, boolean jij)
     {
         Attributes attrs = manifest.getMainAttributes();
 
@@ -449,7 +468,14 @@ public class DependencyExtractor extends DataExtractor
             version = attrs.getValue(IMPL_VER_NAME);
         }
 
-        modEntries.put(providerName, new ModEntry(fileName, providerName, displayName, new DefaultArtifactVersion(version), List.of()));
+        modEntries.put(providerName, new ModEntry(
+                fileName,
+                providerName,
+                displayName,
+                new DefaultArtifactVersion(version),
+                List.of(),
+                jij
+        ));
     }
 
     private static String getProviderNameFromByteCode(String fileName, JarFile modJar)
@@ -531,8 +557,8 @@ public class DependencyExtractor extends DataExtractor
 
     private void addDefaultMods()
     {
-        modEntries.put("minecraft", new ModEntry("", "minecraft", "Minecraft", new DefaultArtifactVersion(mcVersion), Collections.emptyList()));
-        modEntries.put("forge", new ModEntry("", "forge", "Minecraft Forge", new DefaultArtifactVersion(forgeVersion), Collections.emptyList()));
+        modEntries.put("minecraft", new ModEntry("", "minecraft", "Minecraft", new DefaultArtifactVersion(mcVersion), List.of(), false));
+        modEntries.put("forge", new ModEntry("", "forge", "Minecraft Forge", new DefaultArtifactVersion(forgeVersion), List.of(), false));
         hiddenModCount = 2;
     }
 

@@ -57,7 +57,7 @@ public class AccessTransformerExtractor extends DataExtractor
     public boolean isActive() { return active; }
 
     @Override
-    public void acceptFile(String fileName, JarFile modJar)
+    public void acceptFile(String fileName, JarFile modJar, boolean jij)
     {
         JarEntry atEntry = modJar.getJarEntry("META-INF/accesstransformer.cfg");
         if (atEntry == null) { return; }

@@ -41,7 +41,7 @@ public class CoremodExtractor extends DataExtractor
     public boolean isActive() { return active; }
 
     @Override
-    public void acceptFile(String fileName, JarFile modJar)
+    public void acceptFile(String fileName, JarFile modJar, boolean jij)
     {
         JarEntry cmEntry = modJar.getJarEntry("META-INF/coremods.json");
         if (cmEntry == null) { return; }
