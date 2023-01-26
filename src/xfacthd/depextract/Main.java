@@ -8,8 +8,7 @@ import xfacthd.depextract.log.Log;
 import xfacthd.depextract.util.*;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.*;
 import java.util.*;
 import java.util.jar.*;
 
@@ -82,6 +81,7 @@ public class Main
         }
 
         cleanupJiJTempCopies(jijTemp);
+        LOG.info("Done, terminating");
     }
 
     private static List<File> discoverModEntries(File[] mods, List<DataExtractor> extractors, boolean nested)
@@ -208,6 +208,10 @@ public class Main
             try
             {
                 Files.delete(file.toPath());
+            }
+            catch (NoSuchFileException ignored)
+            {
+                //Ignore NoSuchFile, the library is very likely present in multiple mods
             }
             catch (IOException e)
             {
