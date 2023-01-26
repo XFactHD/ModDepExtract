@@ -24,6 +24,11 @@ dependencies {
     implementation 'com.moandjiezana.toml:toml4j:0.7.2'
     implementation 'net.sf.jopt-simple:jopt-simple:6.0-alpha-3'
     implementation 'com.google.code.gson:gson:2.9.0'
+    implementation 'org.ow2.asm:asm:9.4'
+    implementation 'org.ow2.asm:asm-commons:9.4'
+    implementation 'org.ow2.asm:asm-tree:9.4'
+    implementation 'org.ow2.asm:asm-util:9.4'
+    implementation 'org.ow2.asm:asm-analysis:9.4'
 }
 
 jar {

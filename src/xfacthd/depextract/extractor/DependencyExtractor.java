@@ -6,6 +6,9 @@ import com.moandjiezana.toml.Toml;
 import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.maven.artifact.versioning.*;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.tree.*;
 import xfacthd.depextract.Main;
 import xfacthd.depextract.data.dependency.*;
 import xfacthd.depextract.html.*;
@@ -14,8 +17,6 @@ import xfacthd.depextract.util.*;
 import java.io.*;
 import java.util.*;
 import java.util.jar.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class DependencyExtractor extends DataExtractor
 {
@@ -27,7 +28,6 @@ public class DependencyExtractor extends DataExtractor
     private static final Attributes.Name AUTO_MOD_NAME = new Attributes.Name("Automatic-Module-Name");
     private static final Attributes.Name IMPL_TITLE_NAME = new Attributes.Name("Implementation-Title");
     private static final Attributes.Name IMPL_VER_NAME = new Attributes.Name("Implementation-Version");
-    private static final Pattern LANG_PROVIDER_NAME_PATTERN = Pattern.compile("public String name\\(\\) \\{\\R\s+return \"([a-z\\d_.-]+)\";\\R\s+}");
 
     private final Map<String, ModEntry> modEntries = new HashMap<>();
     private final Table<ModEntry, Dependency, DepResult> depResults = HashBasedTable.create(0, 4);
@@ -428,13 +428,9 @@ public class DependencyExtractor extends DataExtractor
             return;
         }
 
-        String providerName = null;
-        if (Decompiler.isDecompilerPresent())
-        {
-            providerName = getProviderNameFromDecomp(fileName, modJar);
-        }
+        String providerName = getProviderNameFromByteCode(fileName, modJar);
 
-        // The name deduction without the decompiler is an ugly guess
+        // The name deduction when the bytecode analysis fails is an ugly guess
         if (providerName == null)
         {
             if (attrs.containsKey(AUTO_MOD_NAME))
@@ -456,7 +452,7 @@ public class DependencyExtractor extends DataExtractor
         modEntries.put(providerName, new ModEntry(fileName, providerName, displayName, new DefaultArtifactVersion(version), List.of()));
     }
 
-    private static String getProviderNameFromDecomp(String fileName, JarFile modJar)
+    private static String getProviderNameFromByteCode(String fileName, JarFile modJar)
     {
         JarEntry serviceEntry = modJar.getJarEntry("META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider");
         if (serviceEntry == null)
@@ -480,54 +476,57 @@ public class DependencyExtractor extends DataExtractor
 
         serviceClassName = serviceClassName.replace('.', '/').replaceAll("\\R", "");
 
-        if (!Decompiler.copyToInput(fileName, modJar, serviceClassName + ".class"))
-        {
-            Main.LOG.error("Failed to prepare JAR '%s' for decompilation");
-            return null;
-        }
-
-        JarFile decompJar = Decompiler.decompile(fileName);
-        if (decompJar == null)
-        {
-            Main.LOG.error("Failed to decompile JAR '%s'", fileName);
-            Decompiler.cleanup(fileName);
-            return null;
-        }
-
-        JarEntry serviceClass = decompJar.getJarEntry(serviceClassName + ".java");
+        JarEntry serviceClass = modJar.getJarEntry(serviceClassName + ".class");
         if (serviceClass == null)
         {
-            Main.LOG.error("Failed to find IModLanguageProvider service");
-            Decompiler.cleanup(fileName, decompJar);
+            Main.LOG.error("LanguageProvider class '%s' is missing from mod JAR '%s'", serviceClassName, modJar.getName());
             return null;
         }
 
-        String serviceCode;
+        byte[] code;
         try
         {
-            InputStream serviceStream = decompJar.getInputStream(serviceClass);
-            serviceCode = new String(serviceStream.readAllBytes());
-            serviceStream.close();
+            InputStream stream = modJar.getInputStream(serviceClass);
+            code = stream.readAllBytes();
+            stream.close();
         }
         catch (IOException e)
         {
-            Main.LOG.error("Failed to read IModLanguageProvider service class code from decompiled JAR '%s'", fileName);
-            return null;
-        }
-        finally
-        {
-            Decompiler.cleanup(fileName, decompJar);
-        }
-
-        Matcher matcher = LANG_PROVIDER_NAME_PATTERN.matcher(serviceCode);
-        if (!matcher.find())
-        {
-            Main.LOG.error("Failed to find language provider name in service class code from decompiled JAR '%s'", fileName);
+            Main.LOG.error("Failed to read LanguageProvider class '%s' from mod JAR '%s'", serviceClassName, modJar.getName());
             return null;
         }
 
-        String result = matcher.group();
-        return result.substring(result.indexOf('\"') + 1, result.lastIndexOf('\"'));
+        ClassReader reader = new ClassReader(code);
+        ClassNode clazz = new ClassNode(Opcodes.ASM9);
+        reader.accept(clazz, 0);
+
+        if (clazz.methods == null)
+        {
+            Main.LOG.error("LanguageProvider class '%s' from mod JAR '%s' is invalid", serviceClassName, modJar.getName());
+            return null;
+        }
+
+        for (MethodNode method : clazz.methods)
+        {
+            if (method.name.equals("name") && method.desc.equals("()Ljava/lang/String;"))
+            {
+                for (AbstractInsnNode insn : method.instructions)
+                {
+                    if (insn.getOpcode() == Opcodes.LDC)
+                    {
+                        Object constant = ((LdcInsnNode) insn).cst;
+                        if (constant instanceof String string)
+                        {
+                            return string;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+
+        Main.LOG.error("Failed to locate the LanguageProvider name in class '%s' in mod JAR '%s'", serviceClassName, modJar.getName());
+        return null;
     }
 
     private void addDefaultMods()
