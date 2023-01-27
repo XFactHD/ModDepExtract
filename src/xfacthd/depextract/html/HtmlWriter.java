@@ -1,5 +1,7 @@
 package xfacthd.depextract.html;
 
+import com.google.common.base.Preconditions;
+
 import java.io.PrintWriter;
 
 public class HtmlWriter
@@ -20,6 +22,16 @@ public class HtmlWriter
         else
         {
             writer.print(line);
+        }
+    }
+
+    public void printMultiLine(String text)
+    {
+        Preconditions.checkState(newLine, "Multiline print is only available when newlines are enabled");
+        for (String line : text.split("\n"))
+        {
+            printIndent();
+            writer.println(line);
         }
     }
 

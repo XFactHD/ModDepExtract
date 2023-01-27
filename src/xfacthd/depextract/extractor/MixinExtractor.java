@@ -3,6 +3,9 @@ package xfacthd.depextract.extractor;
 import com.google.gson.*;
 import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
+import org.apache.commons.lang3.tuple.Pair;
+import org.objectweb.asm.*;
+import org.objectweb.asm.tree.*;
 import xfacthd.depextract.Main;
 import xfacthd.depextract.data.mixin.*;
 import xfacthd.depextract.html.*;
@@ -11,27 +14,28 @@ import xfacthd.depextract.util.*;
 import java.io.*;
 import java.util.*;
 import java.util.jar.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.*;
 
 public class MixinExtractor extends DataExtractor
 {
-    private static final String MIXIN_DECOMP_FILE_NAME = "mixins.jar";
     private static final String MIXIN_RESULT_FILE_NAME = "mixins.html";
-    private static final Pattern SIMPLE_PATTERN = Pattern.compile("@Mixin\\((.+)\\)");
-    private static final Pattern COMPLEX_PATTERN = Pattern.compile("@Mixin\\(\\R(([ a-zA-Z_]+ = \\{?[a-zA-Z\\d./, $\"-]+}?,?\\R)+)\\)");
     private static final MixinTarget[] EMPTY_ARRAY = new MixinTarget[0];
+    private static final MixinInjection[] EMPTY_INJ_ARRAY = new MixinInjection[0];
     private static final Gson GSON = new Gson();
 
     private final Map<String, List<MixinConfig>> mixinEntries = new HashMap<>();
     private OptionSpec<Boolean> extractMixinsOpt = null;
+    private OptionSpec<Boolean> filterAccessorsOpt = null;
     private boolean active = false;
+    private boolean filterAccessors = false;
 
     @Override
     public void registerOptions(OptionParser parser)
     {
         extractMixinsOpt = parser.accepts("extract_mixins", "Extract Mixin configs from mods")
+                .withOptionalArg()
+                .ofType(Boolean.class);
+        filterAccessorsOpt = parser.accepts("filter_accessors", "Remove accessor and invoker Mixins from the list")
                 .withOptionalArg()
                 .ofType(Boolean.class);
     }
@@ -40,6 +44,7 @@ public class MixinExtractor extends DataExtractor
     public void readOptions(OptionSet options)
     {
         active = options.has(extractMixinsOpt) && options.valueOf(extractMixinsOpt);
+        filterAccessors = options.has(filterAccessorsOpt) && options.valueOf(filterAccessorsOpt);
     }
 
     @Override
@@ -61,7 +66,7 @@ public class MixinExtractor extends DataExtractor
             JarEntry configEntry = modJar.getJarEntry(configName);
             if (configEntry == null)
             {
-                Main.LOG.error("Encountered non-existant Mixin config '%s' in mod JAR '%s'", configName, fileName);
+                Main.LOG.error("Encountered non-existent Mixin config '%s' in mod JAR '%s'", configName, fileName);
                 continue;
             }
 
@@ -89,184 +94,181 @@ public class MixinExtractor extends DataExtractor
     {
         Main.LOG.info("Collecting Mixin targets...");
 
-        JarFile decompJar = decompileMixinClasses();
-
         mixinEntries.values().stream().flatMap(List::stream).forEach(config ->
         {
             config.mixins().forEach(entry ->
             {
-                MixinTarget[] targets = resolveTargets(decompJar, entry.classPath());
-                config.resolvedMixins().add(new Mixin(entry.name(), targets));
+                Pair<MixinTarget[], MixinInjection[]> targets = analyseMixinClass(entry);
+                config.resolvedMixins().add(new Mixin(entry.name(), targets.getLeft(), targets.getRight()));
             });
 
             config.clientMixins().forEach(entry ->
             {
-                MixinTarget[] targets = resolveTargets(decompJar, entry.classPath());
-                config.resolvedClientMixins().add(new Mixin(entry.name(), targets));
+                Pair<MixinTarget[], MixinInjection[]> targets = analyseMixinClass(entry);
+                config.resolvedClientMixins().add(new Mixin(entry.name(), targets.getLeft(), targets.getRight()));
             });
 
             config.serverMixins().forEach(entry ->
             {
-                MixinTarget[] targets = resolveTargets(decompJar, entry.classPath());
-                config.resolvedServerMixins().add(new Mixin(entry.name(), targets));
+                Pair<MixinTarget[], MixinInjection[]> targets = analyseMixinClass(entry);
+                config.resolvedServerMixins().add(new Mixin(entry.name(), targets.getLeft(), targets.getRight()));
             });
-        });
 
-        Decompiler.cleanup(MIXIN_DECOMP_FILE_NAME, decompJar);
+            if (filterAccessors)
+            {
+                config.filterAccessors();
+            }
+        });
 
         Main.LOG.info("Mixin targets collected");
     }
 
-
-
-    private JarFile decompileMixinClasses()
+    private Pair<MixinTarget[], MixinInjection[]> analyseMixinClass(MixinEntry entry)
     {
-        if (!Decompiler.isDecompilerPresent()) { return null; }
+        ClassReader reader = new ClassReader(entry.classFile());
+        ClassNode clazz = new ClassNode(Opcodes.ASM9);
+        reader.accept(clazz, 0);
 
-        Map<String, byte[]> mixinClasses = mixinEntries.values()
-                .stream()
-                .flatMap(List::stream)
-                .flatMap(config -> Stream.concat(
-                        config.mixins().stream(),
-                        Stream.concat(
-                                config.clientMixins().stream(),
-                                config.serverMixins().stream()
-                        )
-                ))
-                .collect(Collectors.toMap(entry -> entry.classPath().replace('.', '/'), MixinEntry::classFile));
-
-        boolean success = Decompiler.writeInput(MIXIN_DECOMP_FILE_NAME, zipStream ->
+        AnnotationNode mixinNode = null;
+        for (AnnotationNode anno : clazz.invisibleAnnotations)
         {
-            for (Map.Entry<String, byte[]> entry : mixinClasses.entrySet())
+            if (anno.desc.equals("Lorg/spongepowered/asm/mixin/Mixin;"))
             {
-                zipStream.putNextEntry(new JarEntry(entry.getKey() + ".class"));
-                zipStream.write(entry.getValue());
+                mixinNode = anno;
+                break;
             }
-        });
-
-        if (!success)
-        {
-            Main.LOG.error("Encountered an error while building archive of collected Mixins");
-            return null;
         }
 
-        JarFile result = Decompiler.decompile(MIXIN_DECOMP_FILE_NAME);
-        if (result == null)
-        {
-            Main.LOG.error("Decompilation of collected Mixins failed");
-        }
-        return result;
+        MixinTarget[] targets = resolveMixinTargets(entry.name(), mixinNode);
+        MixinInjection[] injections = resolveMixinInjections(clazz.methods);
+        return Pair.of(targets, injections);
     }
 
-    private MixinTarget[] resolveTargets(JarFile decompJar, String classPath)
+    private MixinTarget[] resolveMixinTargets(String name, AnnotationNode anno)
     {
-        if (decompJar == null) { return EMPTY_ARRAY; }
-
-        JarEntry entry = decompJar.getJarEntry(classPath.replace('.', '/') + ".java");
-        if (entry == null)
+        if (anno == null)
         {
-            Main.LOG.error("Failed to find decompiled Mixin '%s' in JAR", classPath);
+            Main.LOG.error("Found invalid Mixin entry '" + name + "', missing @Mixin annotation");
             return EMPTY_ARRAY;
         }
 
-        String mixinCode;
-        try
+        List<MixinTarget> targets = new ArrayList<>();
+
+        List<Object> values = anno.values;
+        List<Type> annoValues = List.of();
+        List<String> annoTargets = List.of();
+        for (int i = 0; i < values.size(); i += 2)
         {
-            InputStream stream = decompJar.getInputStream(entry);
-            mixinCode = new String(stream.readAllBytes());
-            stream.close();
-        }
-        catch (IOException e)
-        {
-            Main.LOG.error("Encountered an error while reading decompiled Mixin '%s' from JAR", classPath);
-            return EMPTY_ARRAY;
-        }
-
-        String imports = mixinCode.substring(0, mixinCode.indexOf("@Mixin("));
-
-        Matcher simpleMatcher = SIMPLE_PATTERN.matcher(mixinCode);
-        if (simpleMatcher.find())
-        {
-            String match = simpleMatcher.group();
-            Main.LOG.debug("Found target specifier '%s' in Mixin class '%s'", match, classPath);
-
-            List<MixinTarget> targets = new ArrayList<>();
-
-            String literalTargets = match.substring(match.indexOf('{') + 1, match.lastIndexOf('}'));
-            for (String target : literalTargets.split(","))
+            String key = (String) values.get(i);
+            if (key.equals("value"))
             {
-                target = target.trim().replace(".class", "");
-                String fqn = findQualifiedName(classPath, imports, target);
-                targets.add(new MixinTarget(target, fqn));
+                //noinspection unchecked
+                annoValues = (List<Type>) values.get(i + 1);
             }
-
-            return targets.toArray(MixinTarget[]::new);
+            else if (key.equals("targets"))
+            {
+                //noinspection unchecked
+                annoTargets = (List<String>) values.get(i + 1);
+            }
         }
 
-        Matcher matcher = COMPLEX_PATTERN.matcher(mixinCode);
-        if (matcher.find())
+        for (Type type : annoValues)
         {
-            String match = matcher.group().trim();
-            Main.LOG.debug("Found target specifier '%s' in Mixin class '%s'", match.replaceAll("\\R", ""), classPath);
-
-            List<MixinTarget> targets = new ArrayList<>();
-
-            int literalIndex = match.indexOf("value = {");
-            if (literalIndex != -1)
-            {
-                String literalTargets = match.substring(match.indexOf('{', literalIndex) + 1, match.indexOf('}', literalIndex));
-                for (String target : literalTargets.split(","))
-                {
-                    target = target.trim().replace(".class", "");
-                    String fqn = findQualifiedName(classPath, imports, target);
-                    targets.add(new MixinTarget(target, fqn));
-                }
-            }
-
-            int stringIndex = match.indexOf("targets = {");
-            if (stringIndex != -1)
-            {
-                String stringTargets = match.substring(match.indexOf('{', stringIndex) + 1, match.indexOf('}', stringIndex));
-                for (String target : stringTargets.split(","))
-                {
-                    target = target.replace("\"", "");
-                    String qualifiedName = target.trim().replace('/', '.');
-
-                    int lastDot = target.lastIndexOf('.');
-                    if (lastDot != -1)
-                    {
-                        target = target.substring(lastDot + 1);
-                    }
-
-                    int lastSlash = target.lastIndexOf('/');
-                    if (lastSlash != -1)
-                    {
-                        target = target.substring(lastSlash + 1);
-                    }
-
-                    targets.add(new MixinTarget(target, qualifiedName));
-                }
-            }
-
-            return targets.toArray(MixinTarget[]::new);
+            String target = type.getClassName();
+            targets.add(new MixinTarget(Utils.removePackage(target), target));
+        }
+        for (String target : annoTargets)
+        {
+            targets.add(new MixinTarget(Utils.removePackage(target), target));
         }
 
-        Main.LOG.error("Failed to find @Mixin annotation in Mixin class '%s'", classPath);
-        return EMPTY_ARRAY;
+        return targets.toArray(MixinTarget[]::new);
     }
 
-    private String findQualifiedName(String classPath, String imports, String target)
+    private MixinInjection[] resolveMixinInjections(List<MethodNode> methods)
     {
-        Pattern pattern = Pattern.compile("import [a-zA-Z\\d._]+\\." + target + ";");
-        Matcher matcher = pattern.matcher(imports);
-        if (matcher.find())
+        if (methods == null || methods.isEmpty())
         {
-            String match = matcher.group();
-            return match.substring(match.indexOf(' ') + 1, match.indexOf(';'));
+            return EMPTY_INJ_ARRAY;
         }
 
-        Main.LOG.error("Failed to find fully qualified name for class '%s' (targeted by Mixin class '%s')", target, classPath);
-        return "";
+        List<MixinInjection> injections = new ArrayList<>();
+
+        for (MethodNode mth : methods)
+        {
+            List<AnnotationNode> annos = mth.visibleAnnotations;
+            if (annos == null || annos.isEmpty())
+            {
+                continue;
+            }
+
+            annos.forEach(anno -> resolveInjection(mth, anno, injections));
+        }
+
+        return injections.toArray(MixinInjection[]::new);
+    }
+
+    private void resolveInjection(MethodNode mth, AnnotationNode anno, List<MixinInjection> injections)
+    {
+        if (anno == null)
+        {
+            return;
+        }
+
+        MixinInjection inj = switch (anno.desc)
+        {
+            case "Lorg/spongepowered/asm/mixin/gen/Accessor;" ->
+            {
+                Map<String, String> target = MixinInjectionType.ACCESSOR.parseAnnotationData(mth, anno);
+                yield new MixinInjection(MixinInjectionType.ACCESSOR, mth, target);
+            }
+            case "Lorg/spongepowered/asm/mixin/gen/Invoker;" ->
+            {
+                Map<String, String> target = MixinInjectionType.INVOKER.parseAnnotationData(mth, anno);
+                yield new MixinInjection(MixinInjectionType.INVOKER, mth, target);
+            }
+            case "Lorg/spongepowered/asm/mixin/injection/Inject;" ->
+            {
+                Map<String, String> target = MixinInjectionType.INJECT.parseAnnotationData(mth, anno);
+                yield new MixinInjection(MixinInjectionType.INJECT, mth, target);
+            }
+            case "Lorg/spongepowered/asm/mixin/injection/Redirect;" ->
+            {
+                Map<String, String> target = MixinInjectionType.REDIRECT.parseAnnotationData(mth, anno);
+                yield new MixinInjection(MixinInjectionType.REDIRECT, mth, target);
+            }
+            case "Lorg/spongepowered/asm/mixin/injection/ModifyArg;" ->
+            {
+                Map<String, String> target = MixinInjectionType.MODIFY_ARG.parseAnnotationData(mth, anno);
+                yield new MixinInjection(MixinInjectionType.MODIFY_ARG, mth, target);
+            }
+            case "Lorg/spongepowered/asm/mixin/injection/ModifyArgs;" ->
+            {
+                Map<String, String> target = MixinInjectionType.MODIFY_ARGS.parseAnnotationData(mth, anno);
+                yield new MixinInjection(MixinInjectionType.MODIFY_ARGS, mth, target);
+            }
+            case "Lorg/spongepowered/asm/mixin/injection/ModifyConstant;" ->
+            {
+                Map<String, String> target = MixinInjectionType.MODIFY_CONSTANT.parseAnnotationData(mth, anno);
+                yield new MixinInjection(MixinInjectionType.MODIFY_CONSTANT, mth, target);
+            }
+            case "Lorg/spongepowered/asm/mixin/injection/ModifyVariable;" ->
+            {
+                Map<String, String> target = MixinInjectionType.MODIFY_VARIABLE.parseAnnotationData(mth, anno);
+                yield new MixinInjection(MixinInjectionType.MODIFY_VARIABLE, mth, target);
+            }
+            case "Lorg/spongepowered/asm/mixin/Overwrite;" ->
+            {
+                Map<String, String> target = MixinInjectionType.OVERWRITE.parseAnnotationData(mth, anno);
+                yield new MixinInjection(MixinInjectionType.OVERWRITE, mth, target);
+            }
+            default -> null;
+        };
+
+        if (inj != null)
+        {
+            injections.add(inj);
+        }
     }
 
     @Override
@@ -283,7 +285,7 @@ public class MixinExtractor extends DataExtractor
 
         Html.html(
                 writer,
-                darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "",
+                String.format("%s %s", darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "", "onclick=\"closeAllPopups()\""),
                 head ->
                 {
                     Html.element(head, "title", "", "Mixin Dump");
@@ -296,12 +298,60 @@ public class MixinExtractor extends DataExtractor
                             Css.property(clazz, "padding", "4px");
                             Css.property(clazz, "vertical-align", "top");
                         });
+                        Css.declareSelector(style, ".popup", clazz ->
+                        {
+                            Css.property(clazz, "position", "relative");
+                            Css.property(clazz, "display", "inline-block");
+                            Css.property(clazz, "cursor", "pointer");
+                            Css.property(clazz, "width", "1.2em");
+                            Css.property(clazz, "height", "1.2em");
+                            Css.property(clazz, "text-align", "center");
+                            Css.property(clazz, "background-color", darkMode ? "#253041" : "#ddd");
+                            Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
+                            Css.property(clazz, "border-radius", "3px");
+                        });
+                        Css.declareSelector(style, ".popup_content", clazz ->
+                        {
+                            Css.property(clazz, "visibility", "hidden");
+                            Css.property(clazz, "width", "500px");
+                            Css.property(clazz, "background-color", "#555");
+                            Css.property(clazz, "color", "#fff");
+                            Css.property(clazz, "border-radius", "6px");
+                            Css.property(clazz, "padding", "8px");
+                            Css.property(clazz, "position", "absolute");
+                            Css.property(clazz, "z-index", "1");
+                            Css.property(clazz, "top", "150%");
+                            Css.property(clazz, "left", "48.55%");
+                            Css.property(clazz, "margin-left", "-250px");
+                            Css.property(clazz, "text-align", "left");
+                        });
+                        Css.declareSelector(style, ".popup_content::after", clazz ->
+                        {
+                            Css.property(clazz, "content", "''");
+                            Css.property(clazz, "position", "absolute");
+                            Css.property(clazz, "bottom", "100%");
+                            Css.property(clazz, "left", "48.55%");
+                            Css.property(clazz, "margin-left", "-10px");
+                            Css.property(clazz, "border-width", "10px");
+                            Css.property(clazz, "border-style", "solid");
+                            Css.property(clazz, "border-color", "transparent transparent #555 transparent");
+                        });
+                        Css.declareSelector(style, ".show", clazz ->
+                            Css.property(clazz, "visibility", "visible")
+                        );
                         Css.declareStickyHeader(style, darkMode);
                     });
                 },
                 body ->
                 {
                     Html.element(body, "h1", "", "Mixin Dump");
+
+                    List<Mixin> allMixins = mixinEntries.values()
+                            .stream()
+                            .flatMap(List::stream)
+                            .map(MixinConfig::allMixins)
+                            .flatMap(List::stream)
+                            .toList();
 
                     long configCount = mixinEntries.values()
                             .stream()
@@ -314,7 +364,41 @@ public class MixinExtractor extends DataExtractor
                             .mapToLong(MixinConfig::mixinCount)
                             .sum();
 
-                    body.println(String.format("Found %d Mixins in %d Mixin configs in %d out of %d mods.<br>", mixinCount, configCount, mixinEntries.size(), modCount));
+                    long accessorCount = allMixins
+                            .stream()
+                            .filter(Mixin::isAccessor)
+                            .count();
+
+                    body.println(String.format("Found %d Mixins in %d Mixin configs in %d out of %d mods.", mixinCount, configCount, mixinEntries.size(), modCount));
+                    body.println(String.format("%d out of %d Mixins are pure Accessors/Invokers.", accessorCount, mixinCount));
+                    body.println("");
+
+                    Html.element(body, "h3", "", "Count by injection type");
+                    int totalInjectionCount = allMixins.stream()
+                            .map(Mixin::injections)
+                            .mapToInt(arr -> arr.length)
+                            .sum();
+                    body.println("Total injections: " + totalInjectionCount);
+                    Html.element(body, "ul", "", list ->
+                    {
+                        for (MixinInjectionType type : MixinInjectionType.values())
+                        {
+                            long injectionCount = allMixins.stream()
+                                    .map(Mixin::injections)
+                                    .flatMap(Arrays::stream)
+                                    .filter(m -> m.type() == type)
+                                    .count();
+                            Html.element(list, "li", "", String.format("%s: %d", type.toString(), injectionCount));
+                        }
+                    });
+                    body.println("");
+
+                    Html.element(body, "h3", "", "Details");
+                    if (filterAccessors)
+                    {
+                        body.println("Accessor and Invoker Mixins are filtered out of the list");
+                        body.println("");
+                    }
 
                     String tableAttrib = "class=\"mod_table\"";
                     MutableObject<String> lastMixinOwner = new MutableObject<>("");
@@ -342,7 +426,7 @@ public class MixinExtractor extends DataExtractor
                             tbody -> mixinEntries.keySet().stream().sorted(String::compareToIgnoreCase).forEachOrdered(fileName ->
                             {
                                 List<MixinConfig> configs = mixinEntries.get(fileName);
-                                long modMaxMixinCount = configs.stream().mapToInt(MixinExtractor::getMaxMixinCount).sum();
+                                long modMaxMixinCount = configs.stream().mapToInt(this::getMaxMixinCount).sum();
                                 configs.forEach(config ->
                                 {
                                     int maxMixinCount = getMaxMixinCount(config);
@@ -370,12 +454,33 @@ public class MixinExtractor extends DataExtractor
                                             Html.tableCell(row, cellStyle, config.plugin());
                                         }
 
-                                        printMixinEntry(row, config.resolvedMixins(), i, maxMixinCount, tableAttrib);
-                                        printMixinEntry(row, config.resolvedClientMixins(), i, maxMixinCount, tableAttrib);
-                                        printMixinEntry(row, config.resolvedServerMixins(), i, maxMixinCount, tableAttrib);
+                                        printMixinEntry(row, config.resolvedMixins(filterAccessors), i, maxMixinCount, tableAttrib);
+                                        printMixinEntry(row, config.resolvedClientMixins(filterAccessors), i, maxMixinCount, tableAttrib);
+                                        printMixinEntry(row, config.resolvedServerMixins(filterAccessors), i, maxMixinCount, tableAttrib);
                                     }));
                                 });
                             })
+                    );
+
+                    Html.element(body, "script", "type=\"application/javascript\"", script ->
+                        script.printMultiLine("""
+                            function closeAllPopups() {
+                                const popups = document.getElementsByClassName("popup_content");
+                                for (let item of popups) {
+                                    item.classList.remove("show");
+                                }
+                            }
+                            
+                            function togglePopup(event, i) {
+                                const popup = document.getElementById("popup_" + i);
+                                if (!popup.classList.contains("show")) {
+                                    closeAllPopups();
+                                }
+                                popup.classList.toggle("show");
+                                
+                                event.stopPropagation();
+                            }
+                            """)
                     );
                 }
         );
@@ -385,6 +490,8 @@ public class MixinExtractor extends DataExtractor
         Main.LOG.info("Mixin display built");
     }
 
+    private static int popupIdx = 0;
+
     private static void printMixinEntry(HtmlWriter row, List<Mixin> mixins, int i, int maxMixinCount, String cellStyle)
     {
         if (i < mixins.size())
@@ -393,6 +500,28 @@ public class MixinExtractor extends DataExtractor
             Html.tableCell(row, cellStyle, cell ->
             {
                 cell.print(mixin.name());
+                Html.div(cell, "class=\"popup\" onclick=\"togglePopup(event, " + popupIdx + ")\"", div ->
+                {
+                    div.print("(i)");
+                    Html.span(div, "class=\"popup_content\" id=\"popup_" + popupIdx + "\"", span ->
+                    {
+                        MixinInjection[] injections = mixin.injections();
+                        for (int j = 0; j < injections.length; j++)
+                        {
+                            MixinInjection inj = injections[j];
+                            span.println(inj.type().toString() + ": " + Html.escape(inj.methodName() + inj.methodDesc()));
+                            for (String detail : inj.type().printTarget(inj.target()))
+                            {
+                                span.println("&nbsp;&nbsp;&nbsp;&nbsp;" + Html.escape(detail));
+                            }
+                            if (j < injections.length - 1)
+                            {
+                                span.println("");
+                            }
+                        }
+                    });
+                });
+                popupIdx++;
 
                 int targetCount = mixin.targets().length;
                 if (targetCount > 0)
@@ -407,7 +536,7 @@ public class MixinExtractor extends DataExtractor
                         MixinTarget target = mixin.targets()[idx];
                         Html.abbreviation(cell, target.qualifiedName(), target.className());
 
-                        if (idx < mixin.targets().length -1)
+                        if (idx < mixin.targets().length - 1)
                         {
                             cell.print(", ");
                         }
@@ -425,8 +554,18 @@ public class MixinExtractor extends DataExtractor
         }
     }
 
-    private static int getMaxMixinCount(MixinConfig config)
+    private int getMaxMixinCount(MixinConfig config)
     {
+        if (filterAccessors)
+        {
+            return (int) Math.max(
+                    config.resolvedMixins().stream().filter(mixin -> !mixin.isAccessor()).count(),
+                    Math.max(
+                            config.resolvedClientMixins().stream().filter(mixin -> !mixin.isAccessor()).count(),
+                            config.resolvedServerMixins().stream().filter(mixin -> !mixin.isAccessor()).count()
+                    )
+            );
+        }
         return Math.max(config.mixins().size(), Math.max(config.clientMixins().size(), config.serverMixins().size()));
     }
 }

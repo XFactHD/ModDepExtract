@@ -24,7 +24,7 @@ public final class Css
 
         declareSelector(writer, "thead", style ->
         {
-            property(style, "background-color", darkMode ? "#0d1117" : "#ddd");
+            property(style, "background-color", darkMode ? "#253041" : "#ddd");
             property(style, "position", "sticky");
             property(style, "top", "0");
             property(style, "z-index", "2");

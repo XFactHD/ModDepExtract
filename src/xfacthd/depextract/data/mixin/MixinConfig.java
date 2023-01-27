@@ -2,6 +2,7 @@ package xfacthd.depextract.data.mixin;
 
 import com.google.gson.*;
 import xfacthd.depextract.Main;
+import xfacthd.depextract.util.Utils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,7 +15,8 @@ import java.util.stream.StreamSupport;
 public record MixinConfig(
         String name, String compatLevel, String plugin,
         List<MixinEntry> mixins, List<MixinEntry> clientMixins, List<MixinEntry> serverMixins,
-        List<Mixin> resolvedMixins, List<Mixin> resolvedClientMixins, List<Mixin> resolvedServerMixins
+        List<Mixin> resolvedMixins, List<Mixin> resolvedClientMixins, List<Mixin> resolvedServerMixins,
+        List<Mixin> resolvedMixinsNoAccessor, List<Mixin> resolvedClientMixinsNoAccessor, List<Mixin> resolvedServerMixinsNoAccessor
 )
 {
     private MixinConfig(
@@ -22,10 +24,43 @@ public record MixinConfig(
             List<MixinEntry> clientMixins, List<MixinEntry> serverMixins
     )
     {
-        this(name, compatLevel, plugin, mixins, clientMixins, serverMixins, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+        this(name, compatLevel, plugin, mixins, clientMixins, serverMixins, new ArrayList<>(), new ArrayList<>(),
+                new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>()
+        );
+    }
+
+    public void filterAccessors()
+    {
+        resolvedMixins.stream().filter(mixin -> !mixin.isAccessor()).forEach(resolvedMixinsNoAccessor::add);
+        resolvedClientMixins.stream().filter(mixin -> !mixin.isAccessor()).forEach(resolvedClientMixinsNoAccessor::add);
+        resolvedServerMixins.stream().filter(mixin -> !mixin.isAccessor()).forEach(resolvedServerMixinsNoAccessor::add);
+    }
+
+    public List<Mixin> resolvedMixins(boolean filterAccessors)
+    {
+        return filterAccessors ? resolvedMixinsNoAccessor : resolvedMixins;
+    }
+
+    public List<Mixin> resolvedClientMixins(boolean filterAccessors)
+    {
+        return filterAccessors ? resolvedClientMixinsNoAccessor : resolvedClientMixins;
+    }
+
+    public List<Mixin> resolvedServerMixins(boolean filterAccessors)
+    {
+        return filterAccessors ? resolvedServerMixinsNoAccessor : resolvedServerMixins;
     }
 
     public int mixinCount() { return mixins.size() + clientMixins.size() + serverMixins.size(); }
+
+    public List<Mixin> allMixins()
+    {
+        List<Mixin> allMixins = new ArrayList<>(resolvedMixins.size() + resolvedClientMixins.size() + resolvedServerMixins.size());
+        allMixins.addAll(resolvedMixins);
+        allMixins.addAll(resolvedClientMixins);
+        allMixins.addAll(resolvedServerMixins);
+        return allMixins;
+    }
 
 
 
@@ -57,7 +92,7 @@ public record MixinConfig(
         return new MixinConfig(
                 configName,
                 obj.has("compatibilityLevel") ? obj.get("compatibilityLevel").getAsString() : "Unknown",
-                obj.has("plugin") ? removePackage(obj.get("plugin").getAsString()) : "None",
+                obj.has("plugin") ? Utils.removePackage(obj.get("plugin").getAsString()) : "None",
                 mixins,
                 clientMixins,
                 serverMixins
@@ -78,7 +113,7 @@ public record MixinConfig(
             String fullPath = mixinPackage + "." + classPath;
 
             mixins.add(new MixinEntry(
-                    removePackage(classPath),
+                    Utils.removePackage(classPath),
                     fullPath,
                     extractMixinClass(modJar, fullPath)
             ));
@@ -108,15 +143,5 @@ public record MixinConfig(
             Main.LOG.error("Failed to read Mixin class '%s' from mod JAR '%s'", classPath, modJar.getName());
             return EMPTY_ARRAY;
         }
-    }
-
-    private static String removePackage(String name)
-    {
-        int lastDot = name.lastIndexOf('.');
-        if (lastDot != -1)
-        {
-            return name.substring(lastDot + 1);
-        }
-        return name;
     }
 }

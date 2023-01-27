@@ -59,6 +59,26 @@ public class Utils
         return t -> seen.add(keyExtractor.apply(t));
     }
 
+    public static String removePackage(String name)
+    {
+        int lastDot = name.lastIndexOf('.');
+        if (lastDot != -1)
+        {
+            return name.substring(lastDot + 1);
+        }
+        return name;
+    }
+
+    public static String toFirstCharLower(String text)
+    {
+        return text.substring(0, 1).toLowerCase(Locale.ROOT) + text.substring(1);
+    }
+
+    public static String toLowerExceptFirst(String text)
+    {
+        return text.charAt(0) + text.substring(1).toLowerCase();
+    }
+
     public static void openFileInDefaultSoftware(String fileName)
     {
         OS os = OS.get();

@@ -44,6 +44,10 @@ public final class Html
 
     public static void style(HtmlWriter writer, Consumer<HtmlWriter> styleWriter) { element(writer, "style", "", styleWriter); }
 
+    public static void div(HtmlWriter writer, String attribs, String content) { element(writer, "div", attribs, content); }
+
+    public static void div(HtmlWriter writer, String attribs, Consumer<HtmlWriter> contentWriter) { element(writer, "div", attribs, contentWriter); }
+
     public static void span(HtmlWriter writer, String attribs, String content) { element(writer, "span", attribs, content); }
 
     public static void span(HtmlWriter writer, String attribs, Consumer<HtmlWriter> contentWriter) { element(writer, "span", attribs, contentWriter); }
