@@ -285,7 +285,7 @@ public class MixinExtractor extends DataExtractor
 
         Html.html(
                 writer,
-                String.format("%s %s", darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "", "onclick=\"closeAllPopups()\""),
+                String.format("%s %s", darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "", "onclick=\"closeAllTooltips()\""),
                 head ->
                 {
                     Html.element(head, "title", "", "Mixin Dump");
@@ -298,7 +298,7 @@ public class MixinExtractor extends DataExtractor
                             Css.property(clazz, "padding", "4px");
                             Css.property(clazz, "vertical-align", "top");
                         });
-                        Css.declareSelector(style, ".popup", clazz ->
+                        Css.declareSelector(style, ".tooltip", clazz ->
                         {
                             Css.property(clazz, "position", "relative");
                             Css.property(clazz, "display", "inline-block");
@@ -310,9 +310,9 @@ public class MixinExtractor extends DataExtractor
                             Css.property(clazz, "border", String.format("1px solid %s", darkMode ? "#c9d1d9" : "black"));
                             Css.property(clazz, "border-radius", "3px");
                         });
-                        Css.declareSelector(style, ".popup_content", clazz ->
+                        Css.declareSelector(style, ".tooltip_content", clazz ->
                         {
-                            Css.property(clazz, "visibility", "hidden");
+                            Css.property(clazz, "display", "none");
                             Css.property(clazz, "width", "500px");
                             Css.property(clazz, "background-color", "#555");
                             Css.property(clazz, "color", "#fff");
@@ -320,24 +320,23 @@ public class MixinExtractor extends DataExtractor
                             Css.property(clazz, "padding", "8px");
                             Css.property(clazz, "position", "absolute");
                             Css.property(clazz, "z-index", "1");
-                            Css.property(clazz, "top", "150%");
-                            Css.property(clazz, "left", "48.55%");
-                            Css.property(clazz, "margin-left", "-250px");
+                            Css.property(clazz, "top", "100%");
+                            Css.property(clazz, "left", "50%");
+                            Css.property(clazz, "transform", "translate(-50%, 10px)");
                             Css.property(clazz, "text-align", "left");
                         });
-                        Css.declareSelector(style, ".popup_content::after", clazz ->
+                        Css.declareSelector(style, ".tooltip_content::before", clazz ->
                         {
                             Css.property(clazz, "content", "''");
-                            Css.property(clazz, "position", "absolute");
+                            Css.property(clazz, "position", "fixed");
                             Css.property(clazz, "bottom", "100%");
-                            Css.property(clazz, "left", "48.55%");
-                            Css.property(clazz, "margin-left", "-10px");
+                            Css.property(clazz, "left", "48.15%");
                             Css.property(clazz, "border-width", "10px");
                             Css.property(clazz, "border-style", "solid");
                             Css.property(clazz, "border-color", "transparent transparent #555 transparent");
                         });
                         Css.declareSelector(style, ".show", clazz ->
-                            Css.property(clazz, "visibility", "visible")
+                            Css.property(clazz, "display", "inline")
                         );
                         Css.declareStickyHeader(style, darkMode);
                     });
@@ -464,19 +463,19 @@ public class MixinExtractor extends DataExtractor
 
                     Html.element(body, "script", "type=\"application/javascript\"", script ->
                         script.printMultiLine("""
-                            function closeAllPopups() {
-                                const popups = document.getElementsByClassName("popup_content");
-                                for (let item of popups) {
+                            function closeAllTooltips() {
+                                const tooltips = document.getElementsByClassName("tooltip_content");
+                                for (let item of tooltips) {
                                     item.classList.remove("show");
                                 }
                             }
                             
-                            function togglePopup(event, i) {
-                                const popup = document.getElementById("popup_" + i);
-                                if (!popup.classList.contains("show")) {
-                                    closeAllPopups();
+                            function toggleTooltip(event, i) {
+                                const tooltip = document.getElementById("tooltip_" + i);
+                                if (!tooltip.classList.contains("show")) {
+                                    closeAllTooltips();
                                 }
-                                popup.classList.toggle("show");
+                                tooltip.classList.toggle("show");
                                 
                                 event.stopPropagation();
                             }
@@ -500,10 +499,10 @@ public class MixinExtractor extends DataExtractor
             Html.tableCell(row, cellStyle, cell ->
             {
                 cell.print(mixin.name());
-                Html.div(cell, "class=\"popup\" onclick=\"togglePopup(event, " + popupIdx + ")\"", div ->
+                Html.div(cell, "class=\"tooltip\" onclick=\"toggleTooltip(event, " + popupIdx + ")\"", div ->
                 {
                     div.print("(i)");
-                    Html.span(div, "class=\"popup_content\" id=\"popup_" + popupIdx + "\"", span ->
+                    Html.span(div, "class=\"tooltip_content\" id=\"tooltip_" + popupIdx + "\"", span ->
                     {
                         MixinInjection[] injections = mixin.injections();
                         for (int j = 0; j < injections.length; j++)
