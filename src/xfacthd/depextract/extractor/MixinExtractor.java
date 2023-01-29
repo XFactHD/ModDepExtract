@@ -285,7 +285,7 @@ public class MixinExtractor extends DataExtractor
 
         Html.html(
                 writer,
-                String.format("%s %s", darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "", "onclick=\"closeAllTooltips()\""),
+                darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "",
                 head ->
                 {
                     Html.element(head, "title", "", "Mixin Dump");
@@ -463,6 +463,28 @@ public class MixinExtractor extends DataExtractor
 
                     Html.element(body, "script", "type=\"application/javascript\"", script ->
                         script.printMultiLine("""
+                            function onReady(callback) {
+                                if (document.readyState === "complete" || document.readyState === "interactive") {
+                                    setTimeout(callback, 1);
+                                }
+                                else {
+                                    document.addEventListener("DOMContentLoaded", callback);
+                                }
+                            }
+                            
+                            onReady(function() {
+                                const buttons = document.getElementsByClassName("tooltip");
+                                for (let item of buttons) {
+                                    const tooltip = item.querySelector(".tooltip_content");
+                                    item.addEventListener("click", (event) =>
+                                        toggleTooltip(event, tooltip)
+                                    );
+                                }
+                                document.body.addEventListener("click", () =>
+                                    closeAllTooltips()
+                                );
+                            });
+                            
                             function closeAllTooltips() {
                                 const tooltips = document.getElementsByClassName("tooltip_content");
                                 for (let item of tooltips) {
@@ -470,8 +492,7 @@ public class MixinExtractor extends DataExtractor
                                 }
                             }
                             
-                            function toggleTooltip(event, i) {
-                                const tooltip = document.getElementById("tooltip_" + i);
+                            function toggleTooltip(event, tooltip) {
                                 if (!tooltip.classList.contains("show")) {
                                     closeAllTooltips();
                                 }
@@ -499,7 +520,7 @@ public class MixinExtractor extends DataExtractor
             Html.tableCell(row, cellStyle, cell ->
             {
                 cell.print(mixin.name());
-                Html.div(cell, "class=\"tooltip\" onclick=\"toggleTooltip(event, " + popupIdx + ")\"", div ->
+                Html.div(cell, "class=\"tooltip\"", div ->
                 {
                     div.print("(i)");
                     Html.span(div, "class=\"tooltip_content\" id=\"tooltip_" + popupIdx + "\"", span ->

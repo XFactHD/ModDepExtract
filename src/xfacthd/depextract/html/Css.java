@@ -29,11 +29,11 @@ public final class Css
             property(style, "top", "0");
             property(style, "z-index", "2");
 
-            property(style, "box-shadow", String.format("inset -1px 0px %s", shadowColor));
+            property(style, "box-shadow", String.format("inset -1px 0 %s", shadowColor));
         });
 
         declareSelector(writer, "thead th", style ->
-            property(style, "box-shadow", String.format("inset 0px -1px %s, -1px 0px %s", shadowColor, shadowColor))
+            property(style, "box-shadow", String.format("inset 0 -1px %s, 1px 0 %s", shadowColor, shadowColor))
         );
     }
 }
