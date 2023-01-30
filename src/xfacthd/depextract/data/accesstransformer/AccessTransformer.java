@@ -1,18 +1,12 @@
 package xfacthd.depextract.data.accesstransformer;
 
-import xfacthd.depextract.html.Html;
 import xfacthd.depextract.html.HtmlWriter;
+import xfacthd.depextract.util.Utils;
 
 import java.util.*;
 
 public record AccessTransformer(Target type, String modifier, String targetClass, String targetName, String targetDescriptor, boolean flagged)
 {
-    private static final String COLOR_MODIFIER = "#cb7731";
-    private static final String COLOR_CLASS = "#698650";
-    private static final String COLOR_TARGET = "#9876aa";
-    private static final String COLOR_PRIMITIVE = "#5390ba";
-    private static final String COLOR_TYPE = "#ffc66d";
-
     public String target()
     {
         return type.toString() + "_" + targetClass + "_" + targetName + "_" + targetDescriptor;
@@ -20,70 +14,20 @@ public record AccessTransformer(Target type, String modifier, String targetClass
 
     public void toHtml(HtmlWriter writer)
     {
-        Html.span(writer, style(COLOR_MODIFIER), modifier);
-        Html.span(writer, style(COLOR_CLASS), targetClass);
-
+        String member = null;
+        String desc = null;
         if (type != Target.CLASS)
         {
-            writer.disableNewLine();
-
-            Html.span(writer, style(COLOR_TARGET, true), Html.escape(targetName));
-
+            member = targetName;
             if (type != Target.FIELD)
             {
-                String descriptor = targetDescriptor + '\n';
-                StringBuilder primitiveGroup = new StringBuilder();
-
-                for (int i = 0; i < descriptor.length(); i++)
-                {
-                    char c = descriptor.charAt(i);
-                    boolean array = false;
-                    if (c == '[')
-                    {
-                        array = true;
-                        c = descriptor.charAt(i + 1);
-                    }
-
-                    if ((c == 'L' || c == ')' || c == '\n') && primitiveGroup.length() > 0)
-                    {
-                        Html.span(writer, style(COLOR_PRIMITIVE), primitiveGroup.toString());
-                        primitiveGroup = new StringBuilder();
-                    }
-
-                    if (c == 'L')
-                    {
-                        String type = descriptor.substring(i);
-                        int typeEnd = type.indexOf(';');
-                        type = type.substring(0, typeEnd + 1);
-                        Html.span(writer, style(COLOR_TYPE, false), type);
-
-                        i += typeEnd;
-                    }
-                    else if (c == '(' || c == ')')
-                    {
-                        writer.print(String.valueOf(c));
-                    }
-                    else if (c != '\n')
-                    {
-                        if (array)
-                        {
-                            primitiveGroup.append('[');
-                        }
-                        primitiveGroup.append(c);
-                    }
-                }
+                desc = targetDescriptor;
             }
-
-            writer.enableNewLine();
         }
+        Utils.printDescriptor(writer, modifier, targetClass, member, desc);
     }
 
-    private static String style(String color) { return style(color, false); }
 
-    private static String style(String color, boolean underline)
-    {
-        return String.format("style=\"color: %s;%s\"", color, underline ? " text-decoration: underline;" : "");
-    }
 
     public static AccessTransformer parse(String line, List<String> flaggedATs)
     {

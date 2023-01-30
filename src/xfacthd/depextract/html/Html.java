@@ -84,6 +84,46 @@ public final class Html
         element(writer, "abbr", attribs, contentWriter);
     }
 
+    public static void unorderedList(HtmlWriter writer, Consumer<HtmlWriter> contentWriter)
+    {
+        unorderedList(writer, "", contentWriter);
+    }
+
+    public static void unorderedList(HtmlWriter writer, String attribs, Consumer<HtmlWriter> contentWriter)
+    {
+        element(writer, "ul", attribs, contentWriter);
+    }
+
+    public static void orderedList(HtmlWriter writer, Consumer<HtmlWriter> contentWriter)
+    {
+        orderedList(writer, "", contentWriter);
+    }
+
+    public static void orderedList(HtmlWriter writer, String attribs, Consumer<HtmlWriter> contentWriter)
+    {
+        element(writer, "ol", attribs, contentWriter);
+    }
+
+    public static void listEntry(HtmlWriter writer, String content)
+    {
+        listEntry(writer, "", content);
+    }
+
+    public static void listEntry(HtmlWriter writer, Consumer<HtmlWriter> contentWriter)
+    {
+        listEntry(writer, "", contentWriter);
+    }
+
+    public static void listEntry(HtmlWriter writer, String attribs, String content)
+    {
+        listEntry(writer, attribs, contentWriter -> contentWriter.print(content));
+    }
+
+    public static void listEntry(HtmlWriter writer, String attribs, Consumer<HtmlWriter> contentWriter)
+    {
+        element(writer, "li", attribs, contentWriter);
+    }
+
 
 
     public static void writeBoolean(HtmlWriter writer, String attribs, boolean value)

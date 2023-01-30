@@ -219,47 +219,47 @@ public class MixinExtractor extends DataExtractor
         {
             case "Lorg/spongepowered/asm/mixin/gen/Accessor;" ->
             {
-                Map<String, String> target = MixinInjectionType.ACCESSOR.parseAnnotationData(mth, anno);
+                MixinTargetDescriptor target = MixinInjectionType.ACCESSOR.parseAnnotationData(mth, anno);
                 yield new MixinInjection(MixinInjectionType.ACCESSOR, mth, target);
             }
             case "Lorg/spongepowered/asm/mixin/gen/Invoker;" ->
             {
-                Map<String, String> target = MixinInjectionType.INVOKER.parseAnnotationData(mth, anno);
+                MixinTargetDescriptor target = MixinInjectionType.INVOKER.parseAnnotationData(mth, anno);
                 yield new MixinInjection(MixinInjectionType.INVOKER, mth, target);
             }
             case "Lorg/spongepowered/asm/mixin/injection/Inject;" ->
             {
-                Map<String, String> target = MixinInjectionType.INJECT.parseAnnotationData(mth, anno);
+                MixinTargetDescriptor target = MixinInjectionType.INJECT.parseAnnotationData(mth, anno);
                 yield new MixinInjection(MixinInjectionType.INJECT, mth, target);
             }
             case "Lorg/spongepowered/asm/mixin/injection/Redirect;" ->
             {
-                Map<String, String> target = MixinInjectionType.REDIRECT.parseAnnotationData(mth, anno);
+                MixinTargetDescriptor target = MixinInjectionType.REDIRECT.parseAnnotationData(mth, anno);
                 yield new MixinInjection(MixinInjectionType.REDIRECT, mth, target);
             }
             case "Lorg/spongepowered/asm/mixin/injection/ModifyArg;" ->
             {
-                Map<String, String> target = MixinInjectionType.MODIFY_ARG.parseAnnotationData(mth, anno);
+                MixinTargetDescriptor target = MixinInjectionType.MODIFY_ARG.parseAnnotationData(mth, anno);
                 yield new MixinInjection(MixinInjectionType.MODIFY_ARG, mth, target);
             }
             case "Lorg/spongepowered/asm/mixin/injection/ModifyArgs;" ->
             {
-                Map<String, String> target = MixinInjectionType.MODIFY_ARGS.parseAnnotationData(mth, anno);
+                MixinTargetDescriptor target = MixinInjectionType.MODIFY_ARGS.parseAnnotationData(mth, anno);
                 yield new MixinInjection(MixinInjectionType.MODIFY_ARGS, mth, target);
             }
             case "Lorg/spongepowered/asm/mixin/injection/ModifyConstant;" ->
             {
-                Map<String, String> target = MixinInjectionType.MODIFY_CONSTANT.parseAnnotationData(mth, anno);
+                MixinTargetDescriptor target = MixinInjectionType.MODIFY_CONSTANT.parseAnnotationData(mth, anno);
                 yield new MixinInjection(MixinInjectionType.MODIFY_CONSTANT, mth, target);
             }
             case "Lorg/spongepowered/asm/mixin/injection/ModifyVariable;" ->
             {
-                Map<String, String> target = MixinInjectionType.MODIFY_VARIABLE.parseAnnotationData(mth, anno);
+                MixinTargetDescriptor target = MixinInjectionType.MODIFY_VARIABLE.parseAnnotationData(mth, anno);
                 yield new MixinInjection(MixinInjectionType.MODIFY_VARIABLE, mth, target);
             }
             case "Lorg/spongepowered/asm/mixin/Overwrite;" ->
             {
-                Map<String, String> target = MixinInjectionType.OVERWRITE.parseAnnotationData(mth, anno);
+                MixinTargetDescriptor target = MixinInjectionType.OVERWRITE.parseAnnotationData(mth, anno);
                 yield new MixinInjection(MixinInjectionType.OVERWRITE, mth, target);
             }
             default -> null;
@@ -314,7 +314,7 @@ public class MixinExtractor extends DataExtractor
                         {
                             Css.property(clazz, "display", "none");
                             Css.property(clazz, "width", "500px");
-                            Css.property(clazz, "background-color", "#555");
+                            Css.property(clazz, "background-color", "#333");
                             Css.property(clazz, "color", "#fff");
                             Css.property(clazz, "border-radius", "6px");
                             Css.property(clazz, "padding", "8px");
@@ -324,6 +324,7 @@ public class MixinExtractor extends DataExtractor
                             Css.property(clazz, "left", "50%");
                             Css.property(clazz, "transform", "translate(-50%, 10px)");
                             Css.property(clazz, "text-align", "left");
+                            Css.property(clazz, "cursor", "auto");
                         });
                         Css.declareSelector(style, ".tooltip_content::before", clazz ->
                         {
@@ -333,11 +334,16 @@ public class MixinExtractor extends DataExtractor
                             Css.property(clazz, "left", "48.15%");
                             Css.property(clazz, "border-width", "10px");
                             Css.property(clazz, "border-style", "solid");
-                            Css.property(clazz, "border-color", "transparent transparent #555 transparent");
+                            Css.property(clazz, "border-color", "transparent transparent #333 transparent");
                         });
                         Css.declareSelector(style, ".show", clazz ->
                             Css.property(clazz, "display", "inline")
                         );
+                        Css.declareSelector(style, ".no_y_margin", clazz ->
+                        {
+                            Css.property(clazz, "margin-top", "0");
+                            Css.property(clazz, "margin-bottom", "0");
+                        });
                         Css.declareStickyHeader(style, darkMode);
                     });
                 },
@@ -368,8 +374,16 @@ public class MixinExtractor extends DataExtractor
                             .filter(Mixin::isAccessor)
                             .count();
 
+                    long nonMcMixins = allMixins.stream()
+                            .map(Mixin::targets)
+                            .flatMap(Arrays::stream)
+                            .map(MixinTarget::qualifiedName)
+                            .filter(name -> !name.startsWith("net.minecraft.") && !name.startsWith("com.mojang"))
+                            .count();
+
                     body.println(String.format("Found %d Mixins in %d Mixin configs in %d out of %d mods.", mixinCount, configCount, mixinEntries.size(), modCount));
                     body.println(String.format("%d out of %d Mixins are pure Accessors/Invokers.", accessorCount, mixinCount));
+                    body.println(String.format("%d out of %d Mixins target non-Minecraft classes.", nonMcMixins, mixinCount));
                     body.println("");
 
                     Html.element(body, "h3", "", "Count by injection type");
@@ -479,6 +493,11 @@ public class MixinExtractor extends DataExtractor
                                     item.addEventListener("click", (event) =>
                                         toggleTooltip(event, tooltip)
                                     );
+                                    tooltip.addEventListener("click", (event) => {
+                                        if (tooltip.style.display !== 'none') {
+                                            event.stopPropagation();
+                                        }
+                                    });
                                 }
                                 document.body.addEventListener("click", () =>
                                     closeAllTooltips()
@@ -526,14 +545,21 @@ public class MixinExtractor extends DataExtractor
                     Html.span(div, "class=\"tooltip_content\" id=\"tooltip_" + popupIdx + "\"", span ->
                     {
                         MixinInjection[] injections = mixin.injections();
+                        if (injections.length == 0)
+                        {
+                            span.print("No details available");
+                            return;
+                        }
+
                         for (int j = 0; j < injections.length; j++)
                         {
                             MixinInjection inj = injections[j];
-                            span.println(inj.type().toString() + ": " + Html.escape(inj.methodName() + inj.methodDesc()));
-                            for (String detail : inj.type().printTarget(inj.target()))
-                            {
-                                span.println("&nbsp;&nbsp;&nbsp;&nbsp;" + Html.escape(detail));
-                            }
+
+                            span.print(inj.type().toString() + ": ");
+                            Utils.printDescriptor(span, null, null, inj.methodName(), inj.methodDesc());
+                            span.println("");
+
+                            inj.type().printTarget(span, inj.target());
                             if (j < injections.length - 1)
                             {
                                 span.println("");
