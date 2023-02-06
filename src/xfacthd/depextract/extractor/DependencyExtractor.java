@@ -1,7 +1,6 @@
 package xfacthd.depextract.extractor;
 
-import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.Table;
+import com.google.common.collect.*;
 import com.moandjiezana.toml.Toml;
 import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
@@ -28,9 +27,11 @@ public class DependencyExtractor extends DataExtractor
     private static final Attributes.Name AUTO_MOD_NAME = new Attributes.Name("Automatic-Module-Name");
     private static final Attributes.Name IMPL_TITLE_NAME = new Attributes.Name("Implementation-Title");
     private static final Attributes.Name IMPL_VER_NAME = new Attributes.Name("Implementation-Version");
+    private static final Attributes.Name MOD_TYPE_NAME = new Attributes.Name("FMLModType");
 
-    private final Map<String, ModEntry> modEntries = new HashMap<>();
+    private final Multimap<String, ModEntry> modEntries = HashMultimap.create();
     private final Table<ModEntry, Dependency, DepResult> depResults = HashBasedTable.create(0, 4);
+    private final Multimap<String, ModEntry> duplicates = HashMultimap.create();
     private OptionSpec<String> minecraftOpt = null;
     private OptionSpec<String> forgeOpt = null;
     private OptionSpec<Boolean> onlyUnsatisfiedOpt = null;
@@ -88,7 +89,7 @@ public class DependencyExtractor extends DataExtractor
                 return;
             }
 
-            Map<String, ModEntry> entries = parseModEntriesInFile(fileName, tomlStream, manifest, jij);
+            Multimap<String, ModEntry> entries = parseModEntriesInFile(fileName, tomlStream, manifest, jij);
             if (!entries.isEmpty())
             {
                 modEntries.putAll(entries);
@@ -110,25 +111,35 @@ public class DependencyExtractor extends DataExtractor
                 parseLanguageProvider(fileName, modJar, manifest, jij);
                 jarCount++;
             }
-            else if (compareManifestEntry(manifest, "FMLModType", "GAMELIBRARY") || compareManifestEntry(manifest, "FMLModType", "LIBRARY"))
+            else if (compareManifestEntry(manifest, "FMLModType", "GAMELIBRARY") || compareManifestEntry(manifest, "FMLModType", "LIBRARY") || jij)
             {
                 String name = fileName.toLowerCase(Locale.ROOT);
                 String version = "NONE";
+                String modType = "GAMELIBRARY";// JiJed JARs without mod metadata are considered GAMELIBRARIEs
 
-                Attributes attribs = manifest.getMainAttributes();
-                if (attribs.containsKey(IMPL_TITLE_NAME))
+                if (manifest != null)
                 {
-                    name = attribs.getValue(IMPL_TITLE_NAME);
-                }
-                if (attribs.containsKey(IMPL_VER_NAME))
-                {
-                    version = attribs.getValue(IMPL_VER_NAME);
+                    Attributes attribs = manifest.getMainAttributes();
+                    if (attribs.containsKey(IMPL_TITLE_NAME))
+                    {
+                        name = attribs.getValue(IMPL_TITLE_NAME);
+                    }
+                    if (attribs.containsKey(IMPL_VER_NAME))
+                    {
+                        version = attribs.getValue(IMPL_VER_NAME);
+                    }
+                    if (attribs.containsKey(MOD_TYPE_NAME))
+                    {
+                        modType = attribs.getValue(MOD_TYPE_NAME);
+                    }
                 }
 
-                modEntries.put(fileName, new ModEntry(fileName, name, name, new DefaultArtifactVersion(version), List.of(), jij));
+                String modId = name.toLowerCase(Locale.ROOT).replace(' ', '_').replace(".jar", "");
+
+                modEntries.put(fileName, new ModEntry(fileName, modId, name, new DefaultArtifactVersion(version), List.of(), modType, jij));
                 jarCount++;
             }
-            else if (!jij) // Ignore JiJed JARs without mod metadata, distinguishing mods from other libs is basically impossible
+            else
             {
                 Main.LOG.warning("Mod definition not found in mod JAR '%s', skipping", fileName);
             }
@@ -142,12 +153,32 @@ public class DependencyExtractor extends DataExtractor
 
         addDefaultMods();
 
+        Map<String, ModEntry> processed = new HashMap<>();
         for (ModEntry entry : modEntries.values())
         {
             if (entry.modId().equals("minecraft") || entry.modId().equals("forge"))
             {
                 // Don't add MC and Forge to the results
                 continue;
+            }
+
+            if (processed.containsKey(entry.modId()))
+            {
+                ModEntry other = processed.get(entry.modId());
+
+                Main.LOG.warning(
+                        "Found duplicated mod '%s' in mod JAR '%s', previously found in mod JAR '%s'",
+                        entry.modId(),
+                        entry.fileName(),
+                        other.fileName()
+                );
+
+                duplicates.put(entry.modId(), other);
+                duplicates.put(entry.modId(), entry);
+            }
+            else
+            {
+                processed.put(entry.modId(), entry);
             }
 
             if (entry.dependencies().isEmpty())
@@ -158,7 +189,8 @@ public class DependencyExtractor extends DataExtractor
 
             for (Dependency dep : entry.dependencies())
             {
-                ModEntry depMod = modEntries.get(dep.modId());
+                Collection<ModEntry> entries = modEntries.get(dep.modId());
+                ModEntry depMod = entries.isEmpty() ? null : entries.iterator().next();
 
                 boolean installed = depMod != null;
                 boolean inRange = installed && dep.versionRange().containsVersion(depMod.version());
@@ -196,6 +228,17 @@ public class DependencyExtractor extends DataExtractor
                 }
             }
         }
+
+        List<String> toRemove = new ArrayList<>();
+        for (String modId : duplicates.keySet())
+        {
+            Collection<ModEntry> entries = duplicates.get(modId);
+            if (entries.stream().allMatch(ModEntry::jij))
+            {
+                toRemove.add(modId);
+            }
+        }
+        toRemove.forEach(duplicates::removeAll);
 
         Main.LOG.info("Dependencies validated");
     }
@@ -260,14 +303,59 @@ public class DependencyExtractor extends DataExtractor
                     body.print("<br><br>");
 
                     String tableAttrib = "class=\"mod_table\"";
-                    MutableObject<String> lastDepId = new MutableObject<>("");
+
+                    if (!duplicates.isEmpty())
+                    {
+                        Html.element(body, "h2", "", "Duplicated mods");
+
+                        MutableObject<String> lastEntryId = new MutableObject<>("");
+                        Html.table(
+                                body,
+                                tableAttrib,
+                                thead -> Html.tableRow(thead, tableAttrib, row ->
+                                {
+                                    Html.tableHeader(row, tableAttrib, "Mod ID");
+                                    Html.tableHeader(row, tableAttrib, "File name");
+                                    Html.tableHeader(row, tableAttrib, "File source");
+                                    Html.tableHeader(row, tableAttrib, "Mod version");
+                                }),
+                                tbody -> duplicates.keySet().stream().sorted(DependencyExtractor::compareModIDs).forEachOrdered(id ->
+                                {
+                                    Collection<ModEntry> entries = duplicates.get(id);
+                                    entries.forEach(entry -> Html.tableRow(tbody, tableAttrib, row ->
+                                    {
+                                        if (!entry.modId().equals(lastEntryId.getValue()))
+                                        {
+                                            lastEntryId.setValue(entry.modId());
+
+                                            Html.tableCell(
+                                                    row,
+                                                    String.format("%s rowspan=\"%d\"", tableAttrib, entries.size()),
+                                                    entry.modId()
+                                            );
+                                        }
+
+                                        Html.tableCell(row, tableAttrib, entry.fileName());
+                                        Html.tableCell(row, tableAttrib, entry.jij() ? "JiJ" : "Mods folder");
+                                        Html.tableCell(row, tableAttrib, entry.version().toString());
+                                    }));
+                                }));
+
+                        body.print("<br><br>");
+                    }
+
+                    Html.element(body, "h2", "", "Dependency details");
+
+                    MutableObject<ModEntry> lastDepEntry = new MutableObject<>(null);
                     Html.table(
                             body,
                             tableAttrib,
                             thead -> Html.tableRow(thead, tableAttrib, row ->
                             {
                                 Html.tableHeader(row, tableAttrib, "Mod (ID)");
+                                Html.tableHeader(row, tableAttrib, "Mod type");
                                 Html.tableHeader(row, tableAttrib, "Mod version");
+                                Html.tableHeader(row, tableAttrib, "File source");
                                 Html.tableHeader(row, tableAttrib, "Dependency");
                                 Html.tableHeader(row, tableAttrib, "Requested range");
                                 Html.tableHeader(row, tableAttrib, "Installed version");
@@ -282,21 +370,19 @@ public class DependencyExtractor extends DataExtractor
                                 Map<Dependency, DepResult> deps = depResults.row(entry);
                                 deps.keySet().stream().sorted(DEP_COMPARATOR).forEachOrdered(dep -> Html.tableRow(tbody, tableAttrib, row ->
                                 {
-                                    if (!entry.modId().equals(lastDepId.getValue()))
+                                    if (lastDepEntry.getValue() != entry)
                                     {
-                                        lastDepId.setValue(entry.modId());
+                                        lastDepEntry.setValue(entry);
 
-                                        String rowStyle = String.format("%s rowspan=\"%d\"", tableAttrib, deps.size());
+                                        String rowStyle = String.format("%s rowspan=\"%d\"", tableAttrib, Math.max(deps.size(), 1));
                                         Html.tableCell(
                                                 row,
                                                 rowStyle,
                                                 String.format("%s<br>(%s)", entry.modName(), entry.modId())
                                         );
-                                        Html.tableCell(
-                                                row,
-                                                rowStyle,
-                                                entry.version().toString()
-                                        );
+                                        Html.tableCell(row, rowStyle, entry.modType());
+                                        Html.tableCell(row, rowStyle, entry.version().toString());
+                                        Html.tableCell(row, rowStyle, entry.jij() ? "JiJ" : "Mods folder");
                                     }
 
                                     DepResult result = deps.get(dep);
@@ -338,9 +424,9 @@ public class DependencyExtractor extends DataExtractor
 
 
 
-    private static Map<String, ModEntry> parseModEntriesInFile(String fileName, InputStream tomlStream, Manifest manifest, boolean jij)
+    private static Multimap<String, ModEntry> parseModEntriesInFile(String fileName, InputStream tomlStream, Manifest manifest, boolean jij)
     {
-        Map<String, ModEntry> modList = new HashMap<>();
+        Multimap<String, ModEntry> modList = HashMultimap.create();
 
         Toml toml = new Toml().read(tomlStream);
 
@@ -392,6 +478,7 @@ public class DependencyExtractor extends DataExtractor
                     (String) mod.get("displayName"),
                     new DefaultArtifactVersion(version),
                     dependencies,
+                    "MOD",
                     jij
             );
             modList.put(modId, entry);
@@ -474,6 +561,7 @@ public class DependencyExtractor extends DataExtractor
                 displayName,
                 new DefaultArtifactVersion(version),
                 List.of(),
+                "LANGPROVIDER",
                 jij
         ));
     }
@@ -557,8 +645,8 @@ public class DependencyExtractor extends DataExtractor
 
     private void addDefaultMods()
     {
-        modEntries.put("minecraft", new ModEntry("", "minecraft", "Minecraft", new DefaultArtifactVersion(mcVersion), List.of(), false));
-        modEntries.put("forge", new ModEntry("", "forge", "Minecraft Forge", new DefaultArtifactVersion(forgeVersion), List.of(), false));
+        modEntries.put("minecraft", new ModEntry("", "minecraft", "Minecraft", new DefaultArtifactVersion(mcVersion), List.of(), "MOD", false));
+        modEntries.put("forge", new ModEntry("", "forge", "Minecraft Forge", new DefaultArtifactVersion(forgeVersion), List.of(), "MOD", false));
         hiddenModCount = 2;
     }
 
