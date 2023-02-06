@@ -6,10 +6,9 @@ import xfacthd.depextract.util.Utils;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.*;
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
 import java.util.stream.StreamSupport;
 
 public record MixinConfig(
@@ -64,7 +63,7 @@ public record MixinConfig(
 
 
 
-    public static MixinConfig fromJson(String configName, JarFile modJar, JsonObject obj)
+    public static MixinConfig fromJson(String fileName, String configName, FileSystem modJar, JsonObject obj)
     {
         String mixinPackage = obj.get("package").getAsString();
 
@@ -72,21 +71,21 @@ public record MixinConfig(
         if (obj.has("mixins"))
         {
             JsonArray mixinArr = obj.getAsJsonArray("mixins");
-            streamDistinctMixins(mixinArr, entry -> extractMixin(mixins, modJar, mixinPackage, entry));
+            streamDistinctMixins(mixinArr, entry -> extractMixin(fileName, mixins, modJar, mixinPackage, entry));
         }
 
         List<MixinEntry> clientMixins = new ArrayList<>();
         if (obj.has("client"))
         {
             JsonArray mixinArr = obj.getAsJsonArray("client");
-            streamDistinctMixins(mixinArr, entry -> extractMixin(clientMixins, modJar, mixinPackage, entry));
+            streamDistinctMixins(mixinArr, entry -> extractMixin(fileName, clientMixins, modJar, mixinPackage, entry));
         }
 
         List<MixinEntry> serverMixins = new ArrayList<>();
         if (obj.has("server"))
         {
             JsonArray mixinArr = obj.getAsJsonArray("server");
-            streamDistinctMixins(mixinArr, entry -> extractMixin(serverMixins, modJar, mixinPackage, entry));
+            streamDistinctMixins(mixinArr, entry -> extractMixin(fileName, serverMixins, modJar, mixinPackage, entry));
         }
 
         return new MixinConfig(
@@ -105,7 +104,7 @@ public record MixinConfig(
         StreamSupport.stream(mixins.spliterator(), false).distinct().forEach(consumer);
     }
 
-    private static void extractMixin(List<MixinEntry> mixins, JarFile modJar, String mixinPackage, JsonElement entry)
+    private static void extractMixin(String fileName, List<MixinEntry> mixins, FileSystem modJar, String mixinPackage, JsonElement entry)
     {
         if (!entry.isJsonNull())
         {
@@ -115,32 +114,32 @@ public record MixinConfig(
             mixins.add(new MixinEntry(
                     Utils.removePackage(classPath),
                     fullPath,
-                    extractMixinClass(modJar, fullPath)
+                    extractMixinClass(fileName, modJar, fullPath)
             ));
         }
     }
 
     private static final byte[] EMPTY_ARRAY = new byte[0];
 
-    private static byte[] extractMixinClass(JarFile modJar, String classPath)
+    private static byte[] extractMixinClass(String fileName, FileSystem modJar, String classPath)
     {
-        JarEntry entry = modJar.getJarEntry(classPath.replace('.', '/') + ".class");
-        if (entry == null)
+        Path entry = modJar.getPath(classPath.replace('.', '/') + ".class");
+        if (!Files.exists(entry))
         {
-            Main.LOG.error("Mixin class '%s' is missing from mod JAR '%s'", classPath, modJar.getName());
+            Main.LOG.error("Mixin class '%s' is missing from mod JAR '%s'", classPath, fileName);
             return EMPTY_ARRAY;
         }
 
         try
         {
-            InputStream stream = modJar.getInputStream(entry);
+            InputStream stream = Files.newInputStream(entry);
             byte[] result = stream.readAllBytes();
             stream.close();
             return result;
         }
         catch (IOException e)
         {
-            Main.LOG.error("Failed to read Mixin class '%s' from mod JAR '%s'", classPath, modJar.getName());
+            Main.LOG.error("Failed to read Mixin class '%s' from mod JAR '%s'", classPath, fileName);
             return EMPTY_ARRAY;
         }
     }

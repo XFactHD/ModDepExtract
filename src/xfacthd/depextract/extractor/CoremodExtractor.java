@@ -5,14 +5,14 @@ import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import xfacthd.depextract.Main;
 import xfacthd.depextract.data.coremod.CoremodConfig;
+import xfacthd.depextract.data.JarInJarMeta;
 import xfacthd.depextract.html.Css;
 import xfacthd.depextract.html.Html;
 import xfacthd.depextract.util.*;
 
 import java.io.*;
+import java.nio.file.*;
 import java.util.*;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
 
 public class CoremodExtractor extends DataExtractor
 {
@@ -41,16 +41,18 @@ public class CoremodExtractor extends DataExtractor
     public boolean isActive() { return active; }
 
     @Override
-    public void acceptFile(String fileName, JarFile modJar, boolean jij)
+    public String name() { return "Coremods"; }
+
+    @Override
+    public void acceptFile(String fileName, FileSystem modJar, boolean jij, JarInJarMeta jijMeta, Path sourcePath) throws IOException
     {
-        JarEntry cmEntry = modJar.getJarEntry("META-INF/coremods.json");
-        if (cmEntry == null) { return; }
+        Path cmEntry = modJar.getPath("META-INF/coremods.json");
+        if (!Files.exists(cmEntry)) { return; }
 
-        InputStream cmStream = getInputStreamForEntry(modJar, cmEntry, fileName);
-        if (cmStream == null) { return; }
-
+        InputStream cmStream = Files.newInputStream(cmEntry);
         JsonElement cmElem = GSON.fromJson(new InputStreamReader(cmStream), JsonObject.class);
-        cleanupJarEntryInputStream(cmStream, cmEntry, fileName);
+        cmStream.close();
+
         if (!cmElem.isJsonObject())
         {
             Main.LOG.error("Encountered invalid coremods config in mod JAR '%s'", fileName);
@@ -62,8 +64,8 @@ public class CoremodExtractor extends DataExtractor
         {
             config.coremods().forEach((name, path) ->
             {
-                JarEntry jsEntry = modJar.getJarEntry(path);
-                config.jsPresent().put(name, jsEntry != null);
+                Path jsEntry = modJar.getPath(path);
+                config.jsPresent().put(name, Files.exists(jsEntry));
             });
 
             coremodEntries.put(fileName, config);

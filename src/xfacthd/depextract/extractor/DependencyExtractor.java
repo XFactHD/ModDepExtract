@@ -9,13 +9,17 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
 import xfacthd.depextract.Main;
+import xfacthd.depextract.data.JarInJarMeta;
 import xfacthd.depextract.data.dependency.*;
 import xfacthd.depextract.html.*;
-import xfacthd.depextract.util.*;
+import xfacthd.depextract.util.DataExtractor;
+import xfacthd.depextract.util.Utils;
 
 import java.io.*;
+import java.nio.file.*;
 import java.util.*;
-import java.util.jar.*;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
 
 public class DependencyExtractor extends DataExtractor
 {
@@ -76,20 +80,23 @@ public class DependencyExtractor extends DataExtractor
     public boolean isActive() { return true; }
 
     @Override
-    public void acceptFile(String fileName, JarFile modJar, boolean jij)
+    public String name() { return "Dependencies"; }
+
+    @Override
+    public void acceptFile(String fileName, FileSystem modJar, boolean jij, JarInJarMeta jijMeta, Path sourcePath) throws IOException
     {
-        JarEntry tomlEntry = modJar.getJarEntry("META-INF/mods.toml");
+        Path tomlEntry = modJar.getPath("META-INF/mods.toml");
         Manifest manifest = findManifest(modJar, fileName);
-        if (tomlEntry != null)
+        if (Files.exists(tomlEntry))
         {
-            InputStream tomlStream = getInputStreamForEntry(modJar, tomlEntry, fileName);
-            if (tomlStream == null || manifest == null)
+            InputStream tomlStream = Files.newInputStream(tomlEntry);
+            if (manifest == null)
             {
                 Main.LOG.error("Encountered an error while retrieving metadata from mod JAR '%s'", fileName);
                 return;
             }
 
-            Multimap<String, ModEntry> entries = parseModEntriesInFile(fileName, tomlStream, manifest, jij);
+            Multimap<String, ModEntry> entries = parseModEntriesInFile(sourcePath, fileName, tomlStream, manifest, jij);
             if (!entries.isEmpty())
             {
                 modEntries.putAll(entries);
@@ -100,21 +107,21 @@ public class DependencyExtractor extends DataExtractor
                 Main.LOG.error("Failed to parse mod definition for mod JAR '%s'", fileName);
             }
 
-            cleanupJarEntryInputStream(tomlStream, tomlEntry, fileName);
+            tomlStream.close();
 
             jarCount++;
         }
         else
         {
-            if (compareManifestEntry(manifest, "FMLModType", "LANGPROVIDER"))
+            if (compareManifestEntry(manifest, MOD_TYPE_NAME, "LANGPROVIDER"))
             {
-                parseLanguageProvider(fileName, modJar, manifest, jij);
+                parseLanguageProvider(sourcePath, fileName, modJar, manifest, jij);
                 jarCount++;
             }
-            else if (compareManifestEntry(manifest, "FMLModType", "GAMELIBRARY") || compareManifestEntry(manifest, "FMLModType", "LIBRARY") || jij)
+            else if (compareManifestEntry(manifest, MOD_TYPE_NAME, "GAMELIBRARY", "LIBRARY") || jij)
             {
                 String name = fileName.toLowerCase(Locale.ROOT);
-                String version = "NONE";
+                String version = jij ? jijMeta.version().toString() : "NONE";
                 String modType = "GAMELIBRARY";// JiJed JARs without mod metadata are considered GAMELIBRARIEs
 
                 if (manifest != null)
@@ -136,7 +143,9 @@ public class DependencyExtractor extends DataExtractor
 
                 String modId = name.toLowerCase(Locale.ROOT).replace(' ', '_').replace(".jar", "");
 
-                modEntries.put(fileName, new ModEntry(fileName, modId, name, new DefaultArtifactVersion(version), List.of(), modType, jij));
+                modEntries.put(fileName, new ModEntry(
+                        fileName, modId, name, new DefaultArtifactVersion(version), List.of(), modType, jij, sourcePath
+                ));
                 jarCount++;
             }
             else
@@ -307,6 +316,7 @@ public class DependencyExtractor extends DataExtractor
                     if (!duplicates.isEmpty())
                     {
                         Html.element(body, "h2", "", "Duplicated mods");
+                        body.println("This information may not be fully accurate and these duplicates may not actually cause issues<br>");
 
                         MutableObject<String> lastEntryId = new MutableObject<>("");
                         Html.table(
@@ -336,7 +346,7 @@ public class DependencyExtractor extends DataExtractor
                                         }
 
                                         Html.tableCell(row, tableAttrib, entry.fileName());
-                                        Html.tableCell(row, tableAttrib, entry.jij() ? "JiJ" : "Mods folder");
+                                        Html.tableCell(row, tableAttrib, cell -> printFileSource(cell, entry));
                                         Html.tableCell(row, tableAttrib, entry.version().toString());
                                     }));
                                 }));
@@ -382,7 +392,7 @@ public class DependencyExtractor extends DataExtractor
                                         );
                                         Html.tableCell(row, rowStyle, entry.modType());
                                         Html.tableCell(row, rowStyle, entry.version().toString());
-                                        Html.tableCell(row, rowStyle, entry.jij() ? "JiJ" : "Mods folder");
+                                        Html.tableCell(row, rowStyle, cell -> printFileSource(cell, entry));
                                     }
 
                                     DepResult result = deps.get(dep);
@@ -424,7 +434,7 @@ public class DependencyExtractor extends DataExtractor
 
 
 
-    private static Multimap<String, ModEntry> parseModEntriesInFile(String fileName, InputStream tomlStream, Manifest manifest, boolean jij)
+    private static Multimap<String, ModEntry> parseModEntriesInFile(Path sourcePath, String fileName, InputStream tomlStream, Manifest manifest, boolean jij)
     {
         Multimap<String, ModEntry> modList = HashMultimap.create();
 
@@ -479,7 +489,8 @@ public class DependencyExtractor extends DataExtractor
                     new DefaultArtifactVersion(version),
                     dependencies,
                     "MOD",
-                    jij
+                    jij,
+                    sourcePath
             );
             modList.put(modId, entry);
         }
@@ -519,7 +530,7 @@ public class DependencyExtractor extends DataExtractor
         }
     }
 
-    private void parseLanguageProvider(String fileName, JarFile modJar, Manifest manifest, boolean jij)
+    private void parseLanguageProvider(Path sourcePath, String fileName, FileSystem modJar, Manifest manifest, boolean jij)
     {
         Attributes attrs = manifest.getMainAttributes();
 
@@ -562,14 +573,15 @@ public class DependencyExtractor extends DataExtractor
                 new DefaultArtifactVersion(version),
                 List.of(),
                 "LANGPROVIDER",
-                jij
+                jij,
+                sourcePath
         ));
     }
 
-    private static String getProviderNameFromByteCode(String fileName, JarFile modJar)
+    private static String getProviderNameFromByteCode(String fileName, FileSystem modJar)
     {
-        JarEntry serviceEntry = modJar.getJarEntry("META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider");
-        if (serviceEntry == null)
+        Path serviceEntry = modJar.getPath("META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider");
+        if (!Files.exists(serviceEntry))
         {
             Main.LOG.error("Language Provider in JAR '%s' doesn't contain an IModLanguageProvider service file, this is invalid", fileName);
             return null;
@@ -578,7 +590,7 @@ public class DependencyExtractor extends DataExtractor
         String serviceClassName;
         try
         {
-            InputStream serviceStream = modJar.getInputStream(serviceEntry);
+            InputStream serviceStream = Files.newInputStream(serviceEntry);
             serviceClassName = new String(serviceStream.readAllBytes());
             serviceStream.close();
         }
@@ -590,23 +602,23 @@ public class DependencyExtractor extends DataExtractor
 
         serviceClassName = serviceClassName.replace('.', '/').replaceAll("\\R", "");
 
-        JarEntry serviceClass = modJar.getJarEntry(serviceClassName + ".class");
-        if (serviceClass == null)
+        Path serviceClass = modJar.getPath(serviceClassName + ".class");
+        if (!Files.exists(serviceClass))
         {
-            Main.LOG.error("LanguageProvider class '%s' is missing from mod JAR '%s'", serviceClassName, modJar.getName());
+            Main.LOG.error("LanguageProvider class '%s' is missing from mod JAR '%s'", serviceClassName, fileName);
             return null;
         }
 
         byte[] code;
         try
         {
-            InputStream stream = modJar.getInputStream(serviceClass);
+            InputStream stream = Files.newInputStream(serviceClass);
             code = stream.readAllBytes();
             stream.close();
         }
         catch (IOException e)
         {
-            Main.LOG.error("Failed to read LanguageProvider class '%s' from mod JAR '%s'", serviceClassName, modJar.getName());
+            Main.LOG.error("Failed to read LanguageProvider class '%s' from mod JAR '%s'", serviceClassName, fileName);
             return null;
         }
 
@@ -616,7 +628,7 @@ public class DependencyExtractor extends DataExtractor
 
         if (clazz.methods == null)
         {
-            Main.LOG.error("LanguageProvider class '%s' from mod JAR '%s' is invalid", serviceClassName, modJar.getName());
+            Main.LOG.error("LanguageProvider class '%s' from mod JAR '%s' is invalid", serviceClassName, fileName);
             return null;
         }
 
@@ -639,14 +651,14 @@ public class DependencyExtractor extends DataExtractor
             }
         }
 
-        Main.LOG.error("Failed to locate the LanguageProvider name in class '%s' in mod JAR '%s'", serviceClassName, modJar.getName());
+        Main.LOG.error("Failed to locate the LanguageProvider name in class '%s' in mod JAR '%s'", serviceClassName, fileName);
         return null;
     }
 
     private void addDefaultMods()
     {
-        modEntries.put("minecraft", new ModEntry("", "minecraft", "Minecraft", new DefaultArtifactVersion(mcVersion), List.of(), "MOD", false));
-        modEntries.put("forge", new ModEntry("", "forge", "Minecraft Forge", new DefaultArtifactVersion(forgeVersion), List.of(), "MOD", false));
+        modEntries.put("minecraft", new ModEntry("", "minecraft", "Minecraft", new DefaultArtifactVersion(mcVersion), List.of(), "MOD", false, null));
+        modEntries.put("forge", new ModEntry("", "forge", "Minecraft Forge", new DefaultArtifactVersion(forgeVersion), List.of(), "MOD", false, null));
         hiddenModCount = 2;
     }
 
@@ -663,12 +675,23 @@ public class DependencyExtractor extends DataExtractor
     }
 
     @SuppressWarnings("SameParameterValue")
-    private static boolean compareManifestEntry(Manifest manifest, String key, String target)
+    private static boolean compareManifestEntry(Manifest manifest, Attributes.Name key, String... targets)
     {
         if (manifest == null) { return false; }
 
         String value = manifest.getMainAttributes().getValue(key);
-        return value != null && value.equals(target);
+        if (value == null)
+        {
+            return false;
+        }
+        for (String target : targets)
+        {
+            if (value.equals(target))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void printBooleanOrEmpty(HtmlWriter cell, boolean value, boolean hide)
@@ -681,5 +704,30 @@ public class DependencyExtractor extends DataExtractor
         {
             Html.writeBoolean(cell, "", value);
         }
+    }
+
+    private static void printFileSource(HtmlWriter writer, ModEntry entry)
+    {
+        Html.abbreviation(
+                writer,
+                entry.fileSource().toAbsolutePath().toString(),
+                content ->
+                {
+                    if (entry.jij())
+                    {
+                        content.print("JiJ in");
+                        Html.element(
+                                content,
+                                "b",
+                                "style=\"text-weight: bold\"",
+                                entry.fileSource().toString()
+                        );
+                    }
+                    else
+                    {
+                        content.print("Mods folder");
+                    }
+                }
+        );
     }
 }

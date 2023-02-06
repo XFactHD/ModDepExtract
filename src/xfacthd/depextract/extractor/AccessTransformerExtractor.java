@@ -4,13 +4,14 @@ import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import xfacthd.depextract.Main;
 import xfacthd.depextract.data.accesstransformer.AccessTransformer;
+import xfacthd.depextract.data.JarInJarMeta;
 import xfacthd.depextract.html.Css;
 import xfacthd.depextract.html.Html;
 import xfacthd.depextract.util.*;
 
 import java.io.*;
+import java.nio.file.*;
 import java.util.*;
-import java.util.jar.*;
 
 public class AccessTransformerExtractor extends DataExtractor
 {
@@ -57,14 +58,15 @@ public class AccessTransformerExtractor extends DataExtractor
     public boolean isActive() { return active; }
 
     @Override
-    public void acceptFile(String fileName, JarFile modJar, boolean jij)
+    public String name() { return "AccessTransformers"; }
+
+    @Override
+    public void acceptFile(String fileName, FileSystem modJar, boolean jij, JarInJarMeta jijMeta, Path sourcePath) throws IOException
     {
-        JarEntry atEntry = modJar.getJarEntry("META-INF/accesstransformer.cfg");
-        if (atEntry == null) { return; }
+        Path atEntry = modJar.getPath("META-INF/accesstransformer.cfg");
+        if (!Files.exists(atEntry)) { return; }
 
-        InputStream atStream = getInputStreamForEntry(modJar, atEntry, fileName);
-        if (atStream == null) { return; }
-
+        InputStream atStream = Files.newInputStream(atEntry);
         BufferedReader reader = new BufferedReader(new InputStreamReader(atStream));
 
         List<AccessTransformer> ats = new ArrayList<>();

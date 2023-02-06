@@ -3,6 +3,11 @@ package xfacthd.depextract;
 import com.google.common.base.Preconditions;
 import com.google.gson.*;
 import joptsimple.*;
+import joptsimple.util.PathConverter;
+import joptsimple.util.PathProperties;
+import org.apache.maven.artifact.versioning.*;
+import xfacthd.depextract.data.FileEntry;
+import xfacthd.depextract.data.JarInJarMeta;
 import xfacthd.depextract.extractor.*;
 import xfacthd.depextract.log.Log;
 import xfacthd.depextract.util.*;
@@ -10,7 +15,7 @@ import xfacthd.depextract.util.*;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
-import java.util.jar.*;
+import java.util.stream.Stream;
 
 public class Main
 {
@@ -28,9 +33,9 @@ public class Main
         extractors.add(new CoremodExtractor());
 
         OptionParser parser = new OptionParser();
-        OptionSpec<File> directoryOpt = parser.accepts("directory", "The root directory of the Minecraft installation")
+        OptionSpec<Path> directoryOpt = parser.accepts("directory", "The root directory of the Minecraft installation")
                 .withRequiredArg()
-                .ofType(File.class);
+                .withValuesConvertedBy(new PathConverter(PathProperties.DIRECTORY_EXISTING));
         OptionSpec<Boolean> darkOpt = parser.accepts("dark", "Dark mode for the resulting web page")
                 .withOptionalArg()
                 .ofType(Boolean.class);
@@ -43,31 +48,41 @@ public class Main
         extractors.forEach(extractor -> extractor.readOptions(options));
         extractors = extractors.stream().filter(DataExtractor::isActive).toList();
 
-        File directory = options.valueOf(directoryOpt);
+        Path directory = options.valueOf(directoryOpt);
         boolean darkMode = options.hasArgument(darkOpt) && options.valueOf(darkOpt);
         boolean openResult = options.hasArgument(openResultOpt) && options.valueOf(openResultOpt);
 
         LOG.info("Minecraft version: " + depExtractor.getMCVersion());
         LOG.info("Forge version: " + depExtractor.getForgeVersion());
-        LOG.info("Instance directory: " + directory.getAbsolutePath());
+        LOG.info("Instance directory: " + directory);
 
-        Preconditions.checkArgument(directory.isDirectory(), "Expected a directory for argument --directory, got a file");
-        File modFolder = directory.toPath().resolve("mods").toFile();
-        Preconditions.checkArgument(modFolder.exists() && modFolder.isDirectory(), "Expected to find a mods directory");
+        Preconditions.checkArgument(Files.isDirectory(directory), "Expected a directory for argument --directory, got a file");
+        Path modFolder = directory.resolve("mods");
+        Preconditions.checkArgument(Files.exists(modFolder) && Files.isDirectory(modFolder), "Expected to find a mods directory");
 
         LOG.info("Listing all mod JARs...");
-        File[] mods = modFolder.listFiles(file -> file.getName().endsWith(".jar"));
-        if (mods == null || mods.length == 0)
+        List<FileEntry> mods;
+        try (Stream<Path> files = Files.list(modFolder))
+        {
+            mods = files.filter(path -> path.getFileName().toString().endsWith(".jar")).map(FileEntry::of).toList();
+        }
+        catch (IOException e)
+        {
+            LOG.error("Encountered an error while listing contents of mods folder");
+            e.printStackTrace();
+            return;
+        }
+        if (mods.isEmpty())
         {
             LOG.info("Mods folder empty, aborting!");
             return;
         }
-        LOG.info("Found %d mod JARs", mods.length);
+        LOG.info("Found %d mod JARs", mods.size());
 
         LOG.info("Discovering mod entries...");
-        List<File> jijTemp = discoverModEntries(mods, extractors, false);
+        discoverModEntries(mods, extractors, false, modFolder, directory.relativize(modFolder));
         int modCount = depExtractor.getModCount();
-        LOG.info("Discovered %d mod entries in %d mod JARs", modCount, mods.length);
+        LOG.info("Discovered %d mod entries in %d mod JARs", modCount, mods.size());
 
         extractors.forEach(DataExtractor::postProcessData);
         extractors.forEach(extractor -> extractor.printResults(darkMode, modCount));
@@ -78,143 +93,109 @@ public class Main
             Utils.openFileInDefaultSoftware(DependencyExtractor.DEP_RESULT_FILE_NAME);
         }
 
-        cleanupJiJTempCopies(jijTemp);
         LOG.info("Done, terminating");
     }
 
-    private static List<File> discoverModEntries(File[] mods, List<DataExtractor> extractors, boolean nested)
+    private static void discoverModEntries(
+            List<FileEntry> mods, List<DataExtractor> extractors, boolean nested, Path sourcePath, Path sourcePathRel
+    )
     {
-        List<File> jijTemp = nested ? List.of() : new ArrayList<>();
-        for (File modFile : mods)
+        for (FileEntry modEntry : mods)
         {
-            try
-            {
-                LOG.debug("Reading mod JAR '%s'...", modFile.getName());
+            Path modFile = modEntry.path();
+            LOG.debug("Reading mod JAR '%s'...", modFile.getFileName());
 
-                JarFile modJar = new JarFile(modFile);
+            try (FileSystem jarFs = FileSystems.newFileSystem(modFile))
+            {
+                String fileName = modFile.getFileName().toString();
                 if (!nested)
                 {
                     // JiJ doesn't support recursive discovery
-                    jijTemp.addAll(extractJiJedMods(modJar, extractors));
+                    extractJiJedMods(sourcePath.relativize(modFile), fileName, jarFs, extractors);
                 }
-                extractors.forEach(extractor -> extractor.acceptFile(modFile.getName(), modJar, nested));
-                modJar.close();
+                extractors.forEach(extractor ->
+                {
+                    try
+                    {
+                        extractor.acceptFile(fileName, jarFs, nested, modEntry.jijMeta(), sourcePathRel);
+                    }
+                    catch (IOException e)
+                    {
+                        LOG.error("Extractor '%s' failed to process mod JAR '%s'", extractor.name(), fileName);
+                        e.printStackTrace();
+                    }
+                });
             }
             catch (IOException e)
             {
-                LOG.error("Encountered an exception while reading mod JAR '%s'!", modFile.getName());
+                LOG.error("Encountered an exception while reading mod JAR '%s'!", modFile.getFileName());
             }
         }
-        return jijTemp;
     }
 
-    private static List<File> extractJiJedMods(JarFile modJar, List<DataExtractor> extractors)
+    private static void extractJiJedMods(Path modPath, String fileName, FileSystem modJar, List<DataExtractor> extractors)
     {
-        JarEntry jijMeta = modJar.getJarEntry("META-INF/jarjar/metadata.json");
-        if (jijMeta == null)
+        Path jijMetaPath = modJar.getPath("META-INF/jarjar/metadata.json");
+        if (!Files.exists(jijMetaPath))
         {
-            return List.of();
+            return;
         }
 
-        LOG.debug("Found JiJ metadata in mod JAR '%s'", modJar.getName());
+        LOG.debug("Found JiJ metadata in mod JAR '%s'", fileName);
 
         JsonObject metadata;
         try
         {
-            InputStream metaStream = modJar.getInputStream(jijMeta);
+            InputStream metaStream = Files.newInputStream(jijMetaPath);
             metadata = GSON.fromJson(new InputStreamReader(metaStream), JsonObject.class);
         }
         catch (IOException e)
         {
-            LOG.error("Encountered an exception while reading JiJ metadata from mod JAR '%s'", modJar.getName());
-            return List.of();
+            LOG.error("Encountered an exception while reading JiJ metadata from mod JAR '%s'", fileName);
+            return;
         }
 
         if (!metadata.has("jars") || metadata.getAsJsonArray("jars").isEmpty())
         {
-            return List.of();
+            return;
         }
 
         JsonArray jars = metadata.getAsJsonArray("jars");
-        List<JarEntry> jarEntries = new ArrayList<>();
+        List<FileEntry> jarEntries = new ArrayList<>();
 
         for (JsonElement elem : jars)
         {
             JsonObject obj = elem.getAsJsonObject();
-            String path = obj.get("path").getAsString();
-            JarEntry jarEntry = modJar.getJarEntry(path);
-            if (jarEntry == null)
+            Path path = modJar.getPath(obj.get("path").getAsString());
+            if (!Files.exists(path))
             {
-                LOG.error("JiJed mod JAR at path '%s' is missing from mod JAR '%s'", path, modJar.getName());
+                LOG.error("JiJed mod JAR at path '%s' is missing from mod JAR '%s'", path, fileName);
                 continue;
             }
 
-            jarEntries.add(jarEntry);
-        }
+            JsonObject identifier = obj.getAsJsonObject("identifier");
+            String group = identifier.get("group").getAsString();
+            String artifact = identifier.get("artifact").getAsString();
 
-        try
-        {
-            Files.createDirectories(Path.of("./jij_temp"));
-        }
-        catch (IOException e)
-        {
-            LOG.error("Failed to create JiJ temp directory");
-            return List.of();
-        }
-
-        List<File> innerMods = new ArrayList<>();
-
-        for (JarEntry entry : jarEntries)
-        {
-            String jarName = entry.getName();
-            if (jarName.contains("/"))
-            {
-                jarName = jarName.substring(jarName.lastIndexOf('/') + 1);
-            }
+            JsonObject version = obj.getAsJsonObject("version");
+            VersionRange range = null;
             try
             {
-                File file = new File("./jij_temp/" + jarName);
-                if (!file.exists() && !file.createNewFile())
-                {
-                    LOG.error("Failed to create temporary file for JiJed JAR '%s'", jarName);
-                    continue;
-                }
-
-                InputStream stream = modJar.getInputStream(entry);
-                OutputStream outStream = new FileOutputStream(file);
-                outStream.write(stream.readAllBytes());
-                outStream.close();
-                stream.close();
-
-                innerMods.add(file);
+                range = VersionRange.createFromVersionSpec(version.get("range").getAsString());
             }
-            catch (IOException e)
+            catch (InvalidVersionSpecificationException e)
             {
-                LOG.error("Failed to copy JiJed JAR '%s' to temp folder", jarName);
+                LOG.error("Found invalid version range for ");
             }
+            ArtifactVersion artifactVersion = new DefaultArtifactVersion(version.get("artifactVersion").getAsString());
+
+            boolean obfuscated = obj.has("obfuscated") && obj.get("obfuscated").getAsBoolean();
+
+            JarInJarMeta jijMeta = new JarInJarMeta(group, artifact, range, artifactVersion, obfuscated);
+
+            jarEntries.add(new FileEntry(path, jijMeta));
         }
 
-        discoverModEntries(innerMods.toArray(File[]::new), extractors, true);
-
-        return innerMods;
-    }
-
-    private static void cleanupJiJTempCopies(List<File> jijMods)
-    {
-        for (File file : jijMods)
-        {
-            try
-            {
-                Files.delete(file.toPath());
-            }
-            catch (NoSuchFileException ignored)
-            {
-                //Ignore NoSuchFile, the library is very likely present in multiple mods
-            }
-            catch (IOException e)
-            {
-                LOG.error("Failed to delete temp copy of JiJed mod JAR '%s'", file.getName());
-            }
-        }
+        discoverModEntries(jarEntries, extractors, true, null, modPath);
     }
 }

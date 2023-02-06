@@ -7,11 +7,13 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 import xfacthd.depextract.Main;
+import xfacthd.depextract.data.JarInJarMeta;
 import xfacthd.depextract.data.mixin.*;
 import xfacthd.depextract.html.*;
 import xfacthd.depextract.util.*;
 
 import java.io.*;
+import java.nio.file.*;
 import java.util.*;
 import java.util.jar.*;
 import java.util.stream.*;
@@ -51,7 +53,10 @@ public class MixinExtractor extends DataExtractor
     public boolean isActive() { return active; }
 
     @Override
-    public void acceptFile(String fileName, JarFile modJar, boolean jij)
+    public String name() { return "Mixins"; }
+
+    @Override
+    public void acceptFile(String fileName, FileSystem modJar, boolean jij, JarInJarMeta jijMeta, Path sourcePath) throws IOException
     {
         Manifest manifest = findManifest(modJar, fileName);
         if (manifest == null) { return; }
@@ -63,25 +68,24 @@ public class MixinExtractor extends DataExtractor
 
         for (String configName : mixinConfigs)
         {
-            JarEntry configEntry = modJar.getJarEntry(configName);
-            if (configEntry == null)
+            Path configEntry = modJar.getPath(configName);
+            if (!Files.exists(configEntry))
             {
                 Main.LOG.error("Encountered non-existent Mixin config '%s' in mod JAR '%s'", configName, fileName);
                 continue;
             }
 
-            InputStream mixinStream = getInputStreamForEntry(modJar, configEntry, fileName);
-            if (mixinStream == null) { continue; }
-
+            InputStream mixinStream = Files.newInputStream(configEntry);
             JsonElement mixinElem = GSON.fromJson(new InputStreamReader(mixinStream), JsonObject.class);
-            cleanupJarEntryInputStream(mixinStream, configEntry, fileName);
+            mixinStream.close();
+
             if (!mixinElem.isJsonObject())
             {
                 Main.LOG.error("Encountered invalid Mixin config '%s' in mod JAR '%s'", configName, fileName);
                 continue;
             }
 
-            MixinConfig config = MixinConfig.fromJson(configName, modJar, mixinElem.getAsJsonObject());
+            MixinConfig config = MixinConfig.fromJson(fileName, configName, modJar, mixinElem.getAsJsonObject());
             if (config.mixinCount() > 0)
             {
                 mixinEntries.computeIfAbsent(fileName, $ -> new ArrayList<>()).add(config);
