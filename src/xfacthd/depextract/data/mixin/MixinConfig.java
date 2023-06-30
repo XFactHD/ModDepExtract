@@ -65,7 +65,11 @@ public record MixinConfig(
 
     public static MixinConfig fromJson(String fileName, String configName, FileSystem modJar, JsonObject obj)
     {
-        String mixinPackage = obj.get("package").getAsString();
+        String mixinPackage = obj.has("package") ? obj.get("package").getAsString() : null;
+        if (mixinPackage == null)
+        {
+            Main.LOG.warning("Mixin config '%s' in mod JAR '%s' does not declare a Mixin package", configName, fileName);
+        }
 
         List<MixinEntry> mixins = new ArrayList<>();
         if (obj.has("mixins"))
@@ -109,7 +113,7 @@ public record MixinConfig(
         if (!entry.isJsonNull())
         {
             String classPath = entry.getAsString();
-            String fullPath = mixinPackage + "." + classPath;
+            String fullPath = mixinPackage == null ? classPath : (mixinPackage + "." + classPath);
 
             mixins.add(new MixinEntry(
                     Utils.removePackage(classPath),
