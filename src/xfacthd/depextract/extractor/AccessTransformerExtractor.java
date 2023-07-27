@@ -128,6 +128,7 @@ public class AccessTransformerExtractor extends DataExtractor
 
                         Css.declareSelector(style, ".at_entry", clazz -> Css.property(clazz, "font-family", "'Courier New', monospace"));
                         Css.declareStickyHeader(style, darkMode);
+                        Utils.declareDescriptorSelectors(style);
                     });
                 },
                 body ->

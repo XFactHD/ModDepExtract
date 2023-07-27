@@ -1,8 +1,7 @@
 package xfacthd.depextract.util;
 
 import xfacthd.depextract.Main;
-import xfacthd.depextract.html.Html;
-import xfacthd.depextract.html.HtmlWriter;
+import xfacthd.depextract.html.*;
 
 import java.io.*;
 import java.util.*;
@@ -17,6 +16,16 @@ public class Utils
     private static final String COLOR_TARGET = "#9876aa";
     private static final String COLOR_PRIMITIVE = "#5390ba";
     private static final String COLOR_TYPE = "#ffc66d";
+    private static final String CLASS_MODIFIER = "desc_modifier";
+    private static final String CLASS_CLASS = "desc_class";
+    private static final String CLASS_TARGET = "desc_target";
+    private static final String CLASS_PRIMITIVE = "desc_primitive";
+    private static final String CLASS_TYPE = "desc_type";
+    private static final String ATTR_CLASS_MODIFIER = "class=\"" + CLASS_MODIFIER + "\"";
+    private static final String ATTR_CLASS_CLASS = "class=\"" + CLASS_CLASS + "\"";
+    private static final String ATTR_CLASS_TARGET = "class=\"" + CLASS_TARGET + "\"";
+    private static final String ATTR_CLASS_PRIMITIVE = "class=\"" + CLASS_PRIMITIVE + "\"";
+    private static final String ATTR_CLASS_TYPE = "class=\"" + CLASS_TYPE + "\"";
 
     public static String getForgeVersion(String forgeVersion)
     {
@@ -113,15 +122,38 @@ public class Utils
         return Optional.empty();
     }
 
+    public static void declareDescriptorSelectors(HtmlWriter writer)
+    {
+        Css.declareSelector(writer, "." + CLASS_MODIFIER, clazz ->
+                Css.property(clazz, "color", COLOR_MODIFIER)
+        );
+        Css.declareSelector(writer, "." + CLASS_CLASS, clazz ->
+                Css.property(clazz, "color", COLOR_CLASS)
+        );
+        Css.declareSelector(writer, "." + CLASS_TARGET, clazz ->
+        {
+            Css.property(clazz, "color", COLOR_TARGET);
+            Css.property(clazz, "text-decoration", "underline");
+        });
+        Css.declareSelector(writer, "." + CLASS_PRIMITIVE, clazz ->
+                Css.property(clazz, "color", COLOR_PRIMITIVE)
+        );
+        Css.declareSelector(writer, "." + CLASS_TYPE, clazz ->
+                Css.property(clazz, "color", COLOR_TYPE)
+        );
+    }
+
     public static void printDescriptor(HtmlWriter writer, String modifier, String className, String memberName, String descriptor)
     {
         if (modifier != null)
         {
-            Html.span(writer, style(COLOR_MODIFIER), modifier);
+            //Html.span(writer, style(COLOR_MODIFIER), modifier);
+            Html.span(writer, ATTR_CLASS_MODIFIER, modifier);
         }
         if (className != null)
         {
-            Html.span(writer, style(COLOR_CLASS), className);
+            //Html.span(writer, style(COLOR_CLASS), className);
+            Html.span(writer, ATTR_CLASS_CLASS, className);
         }
 
         if (memberName == null && descriptor == null)
@@ -133,7 +165,8 @@ public class Utils
         writer.printIndent();
         if (memberName != null)
         {
-            Html.span(writer, style(COLOR_TARGET, true), Html.escape(memberName));
+            //Html.span(writer, style(COLOR_TARGET, true), Html.escape(memberName));
+            Html.span(writer, ATTR_CLASS_TARGET, Html.escape(memberName));
         }
         if (descriptor != null)
         {
@@ -155,9 +188,9 @@ public class Utils
                     c = descriptor.charAt(i + 1);
                 }
 
-                if ((c == 'L' || c == ')' || c == '\n') && primitiveGroup.length() > 0)
+                if ((c == 'L' || c == ')' || c == '\n') && !primitiveGroup.isEmpty())
                 {
-                    Html.span(writer, style(COLOR_PRIMITIVE), primitiveGroup.toString());
+                    Html.span(writer, ATTR_CLASS_PRIMITIVE, primitiveGroup.toString());
                     primitiveGroup = new StringBuilder();
                 }
 
@@ -166,7 +199,7 @@ public class Utils
                     String type = descriptor.substring(i);
                     int typeEnd = type.indexOf(';');
                     type = type.substring(0, typeEnd + 1);
-                    Html.span(writer, style(COLOR_TYPE, false), type);
+                    Html.span(writer, ATTR_CLASS_TYPE, type);
 
                     i += typeEnd;
                 }
@@ -218,13 +251,6 @@ public class Utils
             method = method.substring(0, descStart);
         }
         return new Descriptor(clazz, method, desc);
-    }
-
-    private static String style(String color) { return style(color, false); }
-
-    private static String style(String color, boolean underline)
-    {
-        return String.format("style=\"color: %s;%s\"", color, underline ? " text-decoration: underline;" : "");
     }
 
     public static void openFileInDefaultSoftware(String fileName)

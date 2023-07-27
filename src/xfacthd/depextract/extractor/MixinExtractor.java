@@ -385,6 +385,7 @@ public class MixinExtractor extends DataExtractor
                             Css.property(clazz, "margin-bottom", "0");
                         });
                         Css.declareStickyHeader(style, darkMode);
+                        Utils.declareDescriptorSelectors(style);
                     });
 
                     if (createGraph)
