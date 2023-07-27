@@ -26,6 +26,7 @@ Execute the built JAR from a command line interface with the following arguments
   - optional, only available when `--extract_ats` is set
 - `--extract_mixins`: If true, Mixin configurations will be extracted from the mod JARs and listed per JAR in a separate `mixins.html` (optional)
 - `--filter_accessors`: If true, Accessor and Invoker Mixins will not be listed in the Mixin details table (optional)
+- `--create_graph`: If true, a graph showing the amount of Mixins per target for all targets with more than one Mixin is added to the Mixin dump (optional)
 - `--extract_coremods`: If true, JS coremod configurations will be extracted from the mod JARs and listed per JAR in a separate `coremods.html` (optional)
 - `--dark`: Enable dark mode for the generated web page (optional)
 - `--open_result`: If true, the resulting web page will be opened automatically in the default browser (optional)
