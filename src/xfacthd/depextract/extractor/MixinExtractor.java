@@ -539,7 +539,7 @@ public class MixinExtractor extends DataExtractor
                         Html.element(body, "canvas", "id=\"graph\"", "");
                     }
 
-                    Html.element(body, "script", "type=\"module\" async defer", script ->
+                    Html.element(body, "script", "type=\"module\" async", script ->
                     {
                         if (createGraph)
                             script.print("import { Chart } from \"%s\"\n".formatted(CHART_JS_SRC));
