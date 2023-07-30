@@ -6,8 +6,7 @@ import xfacthd.depextract.html.*;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.*;
 
 public class Utils
 {
@@ -251,6 +250,38 @@ public class Utils
             method = method.substring(0, descStart);
         }
         return new Descriptor(clazz, method, desc);
+    }
+
+    public static <T> void forEach(Iterable<T> iterable, Consumer<T> consumer)
+    {
+        if (iterable != null)
+        {
+            iterable.forEach(consumer);
+        }
+    }
+
+    public static <T> void forEach(Iterable<T> iterable, BiConsumer<Integer, T> consumer)
+    {
+        if (iterable != null)
+        {
+            int[] i = new int[1];
+            iterable.forEach(t ->
+            {
+                consumer.accept(i[0], t);
+                i[0]++;
+            });
+        }
+    }
+
+    public static <T> void forEach(T[] array, Consumer<T> consumer)
+    {
+        if (array != null)
+        {
+            for (T t : array)
+            {
+                consumer.accept(t);
+            }
+        }
     }
 
     public static void openFileInDefaultSoftware(String fileName)

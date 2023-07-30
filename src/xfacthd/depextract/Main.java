@@ -31,6 +31,7 @@ public class Main
         extractors.add(new AccessTransformerExtractor());
         extractors.add(new MixinExtractor());
         extractors.add(new CoremodExtractor());
+        extractors.add(new ClassFinderExtractor());
 
         OptionParser parser = new OptionParser();
         OptionSpec<Path> directoryOpt = parser.accepts("directory", "The root directory of the Minecraft installation")

@@ -28,6 +28,9 @@ Execute the built JAR from a command line interface with the following arguments
 - `--filter_accessors`: If true, Accessor and Invoker Mixins will not be listed in the Mixin details table (optional)
 - `--create_graph`: If true, a graph showing the amount of Mixins per target for all targets with more than one Mixin is added to the Mixin dump (optional)
 - `--extract_coremods`: If true, JS coremod configurations will be extracted from the mod JARs and listed per JAR in a separate `coremods.html` (optional)
+- `--search_classes`: If true, all mods will be searched for any references to the classes listed in the `--target_classes` argument (optional)
+- `--target_classes`: Comma-separated list of fully qualified class names to search for (required if `--search_classes` is true)
+- `--ignored_classes`: Comma-separated list of fully qualified class names to ignore when searching for the targets (optional)
 - `--dark`: Enable dark mode for the generated web page (optional)
 - `--open_result`: If true, the resulting web page will be opened automatically in the default browser (optional)
 
