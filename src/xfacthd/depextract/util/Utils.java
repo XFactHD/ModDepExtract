@@ -4,9 +4,12 @@ import xfacthd.depextract.Main;
 import xfacthd.depextract.html.*;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.*;
+import java.util.stream.Stream;
 
 public class Utils
 {
@@ -281,6 +284,18 @@ public class Utils
             {
                 consumer.accept(t);
             }
+        }
+    }
+
+    public static Stream<Path> listFiles(Path root)
+    {
+        try
+        {
+            return Files.list(root);
+        }
+        catch (IOException e)
+        {
+            throw new UncheckedIOException(e);
         }
     }
 

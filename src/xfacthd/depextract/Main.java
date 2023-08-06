@@ -37,6 +37,10 @@ public class Main
         OptionSpec<Path> directoryOpt = parser.accepts("directory", "The root directory of the Minecraft installation")
                 .withRequiredArg()
                 .withValuesConvertedBy(new PathConverter(PathProperties.DIRECTORY_EXISTING));
+        OptionSpec<String> additionalModDirsOpt = parser.accepts("add_mod_dirs", "List of additional non-standard mod directories")
+                .withRequiredArg()
+                .withValuesSeparatedBy(",")
+                .ofType(String.class);
         OptionSpec<Boolean> darkOpt = parser.accepts("dark", "Dark mode for the resulting web page")
                 .withOptionalArg()
                 .ofType(Boolean.class);
@@ -50,6 +54,7 @@ public class Main
         extractors = extractors.stream().filter(DataExtractor::isActive).toList();
 
         Path directory = options.valueOf(directoryOpt);
+        List<String> additionalModDirs = options.hasArgument(additionalModDirsOpt) ? options.valuesOf(additionalModDirsOpt) : List.of();
         boolean darkMode = options.hasArgument(darkOpt) && options.valueOf(darkOpt);
         boolean openResult = options.hasArgument(openResultOpt) && options.valueOf(openResultOpt);
 
@@ -61,15 +66,31 @@ public class Main
         Path modFolder = directory.resolve("mods");
         Preconditions.checkArgument(Files.exists(modFolder) && Files.isDirectory(modFolder), "Expected to find a mods directory");
 
+        List<Path> modFolders = new ArrayList<>();
+        modFolders.add(modFolder);
+        if (!additionalModDirs.isEmpty())
+        {
+            additionalModDirs.forEach(dir ->
+            {
+                Path addModFolder = directory.resolve(dir);
+                Preconditions.checkArgument(
+                        Files.exists(addModFolder) && Files.isDirectory(addModFolder),
+                        "%s doesn't exist or is not a directory",
+                        dir
+                );
+                modFolders.add(addModFolder);
+            });
+        }
+
         LOG.info("Listing all mod JARs...");
         List<FileEntry> mods;
-        try (Stream<Path> files = Files.list(modFolder))
+        try (Stream<Path> files = modFolders.stream().flatMap(Utils::listFiles))
         {
             mods = files.filter(path -> path.getFileName().toString().endsWith(".jar")).map(FileEntry::of).toList();
         }
-        catch (IOException e)
+        catch (UncheckedIOException e)
         {
-            LOG.error("Encountered an error while listing contents of mods folder");
+            LOG.error("Encountered an error while listing contents of mods folder(s)");
             e.printStackTrace();
             return;
         }
