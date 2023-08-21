@@ -44,6 +44,10 @@ public class Main
         OptionSpec<Boolean> darkOpt = parser.accepts("dark", "Dark mode for the resulting web page")
                 .withOptionalArg()
                 .ofType(Boolean.class);
+        OptionSpec<Boolean> minifyOpt = parser.accepts("minify", "Minify the resulting web page")
+                .withOptionalArg()
+                .ofType(Boolean.class)
+                .defaultsTo(true);
         OptionSpec<Boolean> openResultOpt = parser.accepts("open_result", "Automatically open the resulting web page in the standard browser")
                 .withOptionalArg()
                 .ofType(Boolean.class);
@@ -56,6 +60,7 @@ public class Main
         Path directory = options.valueOf(directoryOpt);
         List<String> additionalModDirs = options.hasArgument(additionalModDirsOpt) ? options.valuesOf(additionalModDirsOpt) : List.of();
         boolean darkMode = options.hasArgument(darkOpt) && options.valueOf(darkOpt);
+        boolean minify = options.valueOf(minifyOpt);
         boolean openResult = options.hasArgument(openResultOpt) && options.valueOf(openResultOpt);
 
         LOG.info("Minecraft version: " + depExtractor.getMCVersion());
@@ -107,7 +112,7 @@ public class Main
         LOG.info("Discovered %d mod entries in %d mod JARs", modCount, mods.size());
 
         extractors.forEach(DataExtractor::postProcessData);
-        extractors.forEach(extractor -> extractor.printResults(darkMode, modCount));
+        extractors.forEach(extractor -> extractor.printResults(darkMode, minify, modCount));
 
         if (openResult)
         {

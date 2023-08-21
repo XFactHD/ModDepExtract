@@ -275,7 +275,7 @@ public class ClassFinderExtractor extends DataExtractor
     public void postProcessData() { }
 
     @Override
-    public void printResults(boolean darkMode, int modCount)
+    public void printResults(boolean darkMode, boolean minify, int modCount)
     {
         Main.LOG.info("Building ClassFinder display...");
 
@@ -288,6 +288,7 @@ public class ClassFinderExtractor extends DataExtractor
 
         Html.html(
                 writer,
+                minify,
                 darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "",
                 head ->
                 {

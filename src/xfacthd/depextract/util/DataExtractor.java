@@ -23,7 +23,7 @@ public abstract class DataExtractor
 
     public abstract void postProcessData();
 
-    public abstract void printResults(boolean darkMode, int modCount);
+    public abstract void printResults(boolean darkMode, boolean minify, int modCount);
 
 
 

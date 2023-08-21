@@ -33,6 +33,7 @@ Execute the built JAR from a command line interface with the following arguments
 - `--target_classes`: Comma-separated list of fully qualified class names to search for (required if `--search_classes` is true)
 - `--ignored_classes`: Comma-separated list of fully qualified class names to ignore when searching for the targets (optional)
 - `--dark`: Enable dark mode for the generated web page (optional)
+- `--minify`: Toggle minification of the generated web page (optional, defaults to true)
 - `--open_result`: If true, the resulting web page will be opened automatically in the default browser (optional)
 
 The resulting `dependencies.html` and, if enabled with their respective arguments, `accesstransformers.html`, `mixins.html` and `coremods.html` files will be created in the application run directory.

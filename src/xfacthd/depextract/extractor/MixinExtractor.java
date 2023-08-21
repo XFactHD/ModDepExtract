@@ -312,7 +312,7 @@ public class MixinExtractor extends DataExtractor
     }
 
     @Override
-    public void printResults(boolean darkMode, int modCount)
+    public void printResults(boolean darkMode, boolean minify, int modCount)
     {
         Main.LOG.info("Building Mixin display...");
 
@@ -325,6 +325,7 @@ public class MixinExtractor extends DataExtractor
 
         Html.html(
                 writer,
+                minify,
                 darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "",
                 head ->
                 {
@@ -651,7 +652,6 @@ public class MixinExtractor extends DataExtractor
 
                             span.print(inj.type().toString() + ": ");
                             Utils.printDescriptor(span, null, null, inj.methodName(), inj.methodDesc());
-                            span.println("");
 
                             inj.type().printTarget(span, inj.target());
                             if (j < injections.length - 1)

@@ -2,15 +2,22 @@ package xfacthd.depextract.html;
 
 import com.google.common.base.Preconditions;
 
-import java.io.PrintWriter;
+import java.io.*;
 
 public class HtmlWriter
 {
-    private final PrintWriter writer;
+    private final StringWriter stringWriter = new StringWriter();
+    private final PrintWriter writer = new PrintWriter(stringWriter);
+    private final PrintWriter outWriter;
+    private final boolean minify;
     private int indent = 0;
     private boolean newLine = true;
 
-    public HtmlWriter(PrintWriter writer) { this.writer = writer; }
+    public HtmlWriter(PrintWriter writer, boolean minify)
+    {
+        this.outWriter = writer;
+        this.minify = minify;
+    }
 
     public void print(String line)
     {
@@ -30,6 +37,15 @@ public class HtmlWriter
         Preconditions.checkState(newLine, "Multiline print is only available when newlines are enabled");
         for (String line : text.split("\n"))
         {
+            if (minify)
+            {
+                line = line.trim();
+                if (line.isEmpty())
+                {
+                    continue;
+                }
+            }
+
             printIndent();
             writer.println(line);
         }
@@ -39,9 +55,12 @@ public class HtmlWriter
 
     public void printIndent()
     {
-        for (int i = 0; i < indent * 4; i++)
+        if (!minify)
         {
-            writer.write(' ');
+            for (int i = 0; i < indent * 4; i++)
+            {
+                writer.write(' ');
+            }
         }
     }
 
@@ -52,4 +71,17 @@ public class HtmlWriter
     public void enableNewLine() { newLine = true; }
 
     public void disableNewLine() { newLine = false; }
+
+    public void end()
+    {
+        writer.close();
+        String contents = stringWriter.toString();
+        if (minify)
+        {
+            contents = contents.replaceAll("( {2,})", " ");
+            contents = contents.replaceAll("\r", "");
+            contents = contents.replaceAll("(\n{2,})", "\n");
+        }
+        outWriter.write(contents);
+    }
 }

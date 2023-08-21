@@ -99,7 +99,7 @@ public class AccessTransformerExtractor extends DataExtractor
     public void postProcessData() { }
 
     @Override
-    public void printResults(boolean darkMode, int modCount)
+    public void printResults(boolean darkMode, boolean minify, int modCount)
     {
         Main.LOG.info("Building AT display...");
 
@@ -112,6 +112,7 @@ public class AccessTransformerExtractor extends DataExtractor
 
         Html.html(
                 writer,
+                minify,
                 darkMode ? "style=\"background-color: #0d1117; color: #f0f6fc;\"" : "",
                 head ->
                 {

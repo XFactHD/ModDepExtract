@@ -8,9 +8,9 @@ public final class Html
     public static final String COLOR_RED = "#f85149";
     public static final String COLOR_GREEN = "#2ea043";
 
-    public static void html(PrintWriter writer, String bodyAttribs, Consumer<HtmlWriter> headWriter, Consumer<HtmlWriter> bodyWriter)
+    public static void html(PrintWriter writer, boolean minify, String bodyAttribs, Consumer<HtmlWriter> headWriter, Consumer<HtmlWriter> bodyWriter)
     {
-        HtmlWriter htmlWriter = new HtmlWriter(writer);
+        HtmlWriter htmlWriter = new HtmlWriter(writer, minify);
 
         htmlWriter.print("<!DOCTYPE html>");
         element(htmlWriter, "html", "lang=\"en\"", html ->
@@ -18,6 +18,8 @@ public final class Html
             element(html, "head", "", headWriter);
             element(html, "body", bodyAttribs, bodyWriter);
         });
+
+        htmlWriter.end();
     }
 
     public static void element(HtmlWriter writer, String type, String attribs, String content)
