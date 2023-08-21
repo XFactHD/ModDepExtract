@@ -27,14 +27,15 @@ public class CoremodExtractor extends DataExtractor
     public void registerOptions(OptionParser parser)
     {
         extractCoremodsOpt = parser.accepts("extract_coremods", "Extract JS coremods from mods")
-                .withOptionalArg()
-                .ofType(Boolean.class);
+                .withRequiredArg()
+                .ofType(Boolean.class)
+                .defaultsTo(false);
     }
 
     @Override
     public void readOptions(OptionSet options)
     {
-        active = options.has(extractCoremodsOpt) && options.valueOf(extractCoremodsOpt);
+        active = options.valueOf(extractCoremodsOpt);
     }
 
     @Override

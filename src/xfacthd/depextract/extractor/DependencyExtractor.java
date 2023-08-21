@@ -52,19 +52,23 @@ public class DependencyExtractor extends DataExtractor
     {
         minecraftOpt = parser.accepts("minecraft", "The version of Minecraft being used")
                 .withRequiredArg()
-                .ofType(String.class);
+                .ofType(String.class)
+                .required();
 
         forgeOpt = parser.accepts("forge", "The version of Forge being used")
                 .withRequiredArg()
-                .ofType(String.class);
+                .ofType(String.class)
+                .required();
 
         onlySatisfiedOpt = parser.accepts("onlySatisfied", "If true, only mods with all dependencies satisfed will be printed")
                 .withRequiredArg()
-                .ofType(Boolean.class);
+                .ofType(Boolean.class)
+                .defaultsTo(false);
 
         onlyUnsatisfiedOpt = parser.accepts("onlyUnsatisfied", "If true, only mods with at least one unsatisfied dependency will be printed")
                 .withRequiredArg()
-                .ofType(Boolean.class);
+                .ofType(Boolean.class)
+                .defaultsTo(false);
     }
 
     @Override
@@ -72,8 +76,8 @@ public class DependencyExtractor extends DataExtractor
     {
         this.mcVersion = options.valueOf(minecraftOpt);
         this.forgeVersion = Utils.getForgeVersion(options.valueOf(forgeOpt));
-        this.onlySatisfied = options.has(onlySatisfiedOpt) && options.valueOf(onlySatisfiedOpt);
-        this.onlyUnsatisfied = options.has(onlyUnsatisfiedOpt) && options.valueOf(onlyUnsatisfiedOpt);
+        this.onlySatisfied = options.valueOf(onlySatisfiedOpt);
+        this.onlyUnsatisfied = options.valueOf(onlyUnsatisfiedOpt);
     }
 
     @Override

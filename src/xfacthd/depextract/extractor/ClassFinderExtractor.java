@@ -35,18 +35,20 @@ public class ClassFinderExtractor extends DataExtractor
     public void registerOptions(OptionParser parser)
     {
         searchClassesOpt = parser.accepts("search_classes", "Search references to arbitrary classes")
-                .withOptionalArg()
-                .ofType(Boolean.class);
+                .withRequiredArg()
+                .ofType(Boolean.class)
+                .defaultsTo(false);
 
         targetClassesOpt = parser.accepts("target_classes", "Fully qualified names of classes to be searched")
                 .availableIf(searchClassesOpt)
+                .requiredIf(searchClassesOpt)
                 .withRequiredArg()
                 .withValuesSeparatedBy(",")
                 .ofType(String.class);
 
         ignoredClassesOpt = parser.accepts("ignored_classes", "Fully qualified names of classes whose usage of target types should be ignored")
                 .availableIf(searchClassesOpt)
-                .withOptionalArg()
+                .withRequiredArg()
                 .withValuesSeparatedBy(",")
                 .ofType(String.class);
     }
@@ -57,7 +59,7 @@ public class ClassFinderExtractor extends DataExtractor
         targetClasses.clear();
         ignoredClasses.clear();
 
-        active = options.has(searchClassesOpt) && options.valueOf(searchClassesOpt);
+        active = options.valueOf(searchClassesOpt);
         if (!active)
         {
             return;

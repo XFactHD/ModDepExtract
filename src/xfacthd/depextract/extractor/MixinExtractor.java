@@ -40,22 +40,27 @@ public class MixinExtractor extends DataExtractor
     public void registerOptions(OptionParser parser)
     {
         extractMixinsOpt = parser.accepts("extract_mixins", "Extract Mixin configs from mods")
-                .withOptionalArg()
-                .ofType(Boolean.class);
+                .withRequiredArg()
+                .ofType(Boolean.class)
+                .defaultsTo(false);
         filterAccessorsOpt = parser.accepts("filter_accessors", "Remove accessor and invoker Mixins from the list")
-                .withOptionalArg()
-                .ofType(Boolean.class);
+                .availableIf(extractMixinsOpt)
+                .withRequiredArg()
+                .ofType(Boolean.class)
+                .defaultsTo(false);
         createGraphOpt = parser.accepts("create_graph", "Create a graph showing the amount of Mixins per target class")
-                .withOptionalArg()
-                .ofType(Boolean.class);
+                .availableIf(extractMixinsOpt)
+                .withRequiredArg()
+                .ofType(Boolean.class)
+                .defaultsTo(false);
     }
 
     @Override
     public void readOptions(OptionSet options)
     {
-        active = options.has(extractMixinsOpt) && options.valueOf(extractMixinsOpt);
-        filterAccessors = options.has(filterAccessorsOpt) && options.valueOf(filterAccessorsOpt);
-        createGraph = options.has(createGraphOpt) && options.valueOf(createGraphOpt);
+        active = options.valueOf(extractMixinsOpt);
+        filterAccessors = options.valueOf(filterAccessorsOpt);
+        createGraph = options.valueOf(createGraphOpt);
     }
 
     @Override

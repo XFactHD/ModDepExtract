@@ -27,12 +27,13 @@ public class AccessTransformerExtractor extends DataExtractor
     public void registerOptions(OptionParser parser)
     {
         extractATsOpt = parser.accepts("extract_ats", "Extract AccessTransformers from mods")
-                .withOptionalArg()
-                .ofType(Boolean.class);
+                .withRequiredArg()
+                .ofType(Boolean.class)
+                .defaultsTo(false);
 
         flaggedATsOpt = parser.accepts("flagged_ats", "Mark AT targets to be flagged")
                 .availableIf(extractATsOpt)
-                .withOptionalArg()
+                .withRequiredArg()
                 .withValuesSeparatedBy(",")
                 .ofType(String.class);
     }
@@ -40,11 +41,10 @@ public class AccessTransformerExtractor extends DataExtractor
     @Override
     public void readOptions(OptionSet options)
     {
-        active = options.has(extractATsOpt) && options.valueOf(extractATsOpt);
+        active = options.valueOf(extractATsOpt);
 
-        if (active && options.has(flaggedATsOpt))
+        if (active)
         {
-            //flaggedATs.addAll(Arrays.asList(options.valueOf(flaggedATsOpt).split(",")));
             flaggedATs.addAll(options.valuesOf(flaggedATsOpt));
 
             if (!flaggedATs.isEmpty())

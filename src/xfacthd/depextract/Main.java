@@ -36,22 +36,39 @@ public class Main
         OptionParser parser = new OptionParser();
         OptionSpec<Path> directoryOpt = parser.accepts("directory", "The root directory of the Minecraft installation")
                 .withRequiredArg()
-                .withValuesConvertedBy(new PathConverter(PathProperties.DIRECTORY_EXISTING));
+                .withValuesConvertedBy(new PathConverter(PathProperties.DIRECTORY_EXISTING))
+                .required();
         OptionSpec<String> additionalModDirsOpt = parser.accepts("add_mod_dirs", "List of additional non-standard mod directories")
                 .withRequiredArg()
                 .withValuesSeparatedBy(",")
                 .ofType(String.class);
         OptionSpec<Boolean> darkOpt = parser.accepts("dark", "Dark mode for the resulting web page")
-                .withOptionalArg()
-                .ofType(Boolean.class);
+                .withRequiredArg()
+                .ofType(Boolean.class)
+                .defaultsTo(false);
         OptionSpec<Boolean> minifyOpt = parser.accepts("minify", "Minify the resulting web page")
                 .withOptionalArg()
                 .ofType(Boolean.class)
                 .defaultsTo(true);
         OptionSpec<Boolean> openResultOpt = parser.accepts("open_result", "Automatically open the resulting web page in the standard browser")
-                .withOptionalArg()
-                .ofType(Boolean.class);
+                .withRequiredArg()
+                .ofType(Boolean.class)
+                .defaultsTo(false);
         extractors.forEach(extractor -> extractor.registerOptions(parser));
+
+        if (args.length == 0 || (args.length == 1 && (args[0].equals("help") || args[0].equals("--help"))))
+        {
+            try
+            {
+                parser.printHelpOn(System.out);
+            }
+            catch (IOException e)
+            {
+                LOG.error("Failed to print help");
+                e.printStackTrace();
+            }
+            return;
+        }
 
         OptionSet options = parser.parse(args);
         extractors.forEach(extractor -> extractor.readOptions(options));
@@ -59,9 +76,9 @@ public class Main
 
         Path directory = options.valueOf(directoryOpt);
         List<String> additionalModDirs = options.hasArgument(additionalModDirsOpt) ? options.valuesOf(additionalModDirsOpt) : List.of();
-        boolean darkMode = options.hasArgument(darkOpt) && options.valueOf(darkOpt);
+        boolean darkMode = options.valueOf(darkOpt);
         boolean minify = options.valueOf(minifyOpt);
-        boolean openResult = options.hasArgument(openResultOpt) && options.valueOf(openResultOpt);
+        boolean openResult = options.valueOf(openResultOpt);
 
         LOG.info("Minecraft version: " + depExtractor.getMCVersion());
         LOG.info("Forge version: " + depExtractor.getForgeVersion());
