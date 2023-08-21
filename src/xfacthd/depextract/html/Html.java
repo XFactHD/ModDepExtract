@@ -25,7 +25,16 @@ public final class Html
         element(writer, type, attribs, contentWriter -> contentWriter.print(content));
     }
 
-    public static void element(HtmlWriter writer, String type, String attribs, Consumer<HtmlWriter> contentWriter)
+    public static void element(HtmlWriter writer, String type, String attribs, String content, boolean needsClosingTag)
+    {
+        element(writer, type, attribs, contentWriter -> contentWriter.print(content), needsClosingTag);
+    }
+
+    public static void element(HtmlWriter writer, String type, String attribs, Consumer<HtmlWriter> contentWriter) {
+        element(writer, type, attribs, contentWriter, true);
+    }
+
+    public static void element(HtmlWriter writer, String type, String attribs, Consumer<HtmlWriter> contentWriter, boolean needsClosingTag)
     {
         if (attribs != null && !attribs.isEmpty())
         {
@@ -39,7 +48,9 @@ public final class Html
         writer.push();
         contentWriter.accept(writer);
         writer.pop();
-        writer.print(String.format("</%s>", type));
+
+        if (needsClosingTag)
+            writer.print(String.format("</%s>", type));
     }
 
     public static void style(HtmlWriter writer, Consumer<HtmlWriter> styleWriter) { element(writer, "style", "", styleWriter); }
