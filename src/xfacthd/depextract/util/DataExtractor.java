@@ -37,7 +37,7 @@ public abstract class DataExtractor
         }
         catch (IOException e)
         {
-            Main.LOG.error("Failed to get Manifest from mod JAR '%s'", fileName);
+            Main.LOG.error("Failed to get Manifest from mod JAR '%s'", fileName, e);
             return null;
         }
 

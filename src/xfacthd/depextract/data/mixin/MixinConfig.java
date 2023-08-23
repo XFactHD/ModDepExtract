@@ -143,7 +143,7 @@ public record MixinConfig(
         }
         catch (IOException e)
         {
-            Main.LOG.error("Failed to read Mixin class '%s' from mod JAR '%s'", classPath, fileName);
+            Main.LOG.error("Failed to read Mixin class '%s' from mod JAR '%s'", classPath, fileName, e);
             return EMPTY_ARRAY;
         }
     }

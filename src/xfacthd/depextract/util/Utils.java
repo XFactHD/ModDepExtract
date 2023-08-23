@@ -50,8 +50,7 @@ public class Utils
             }
             catch (IOException e)
             {
-                Main.LOG.error("Output file doesn't exist and file creation failed!");
-                e.printStackTrace();
+                Main.LOG.error("Output file doesn't exist and file creation failed!", e);
                 return null;
             }
         }
@@ -63,8 +62,7 @@ public class Utils
         }
         catch (FileNotFoundException e)
         {
-            Main.LOG.error("Can't open output file for writing!");
-            e.printStackTrace();
+            Main.LOG.error("Can't open output file for writing!", e);
             return null;
         }
 
@@ -319,8 +317,7 @@ public class Utils
         }
         catch (IOException e)
         {
-            Main.LOG.error("Failed to open file in default app");
-            e.printStackTrace();
+            Main.LOG.error("Failed to open file in default app", e);
         }
     }
 

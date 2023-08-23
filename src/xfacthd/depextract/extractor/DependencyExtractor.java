@@ -601,7 +601,7 @@ public class DependencyExtractor extends DataExtractor
         }
         catch (IOException e)
         {
-            Main.LOG.error("Failed to read IModLanguageProvider service class name from JAR '%s'", fileName);
+            Main.LOG.error("Failed to read IModLanguageProvider service class name from JAR '%s'", fileName, e);
             return null;
         }
 
@@ -623,7 +623,7 @@ public class DependencyExtractor extends DataExtractor
         }
         catch (IOException e)
         {
-            Main.LOG.error("Failed to read LanguageProvider class '%s' from mod JAR '%s'", serviceClassName, fileName);
+            Main.LOG.error("Failed to read LanguageProvider class '%s' from mod JAR '%s'", serviceClassName, fileName, e);
             return null;
         }
 

@@ -86,7 +86,7 @@ public class AccessTransformerExtractor extends DataExtractor
         }
         catch (IOException e)
         {
-            Main.LOG.error("Encountered an error while parsing AccessTransformers for mod JAR '%s'!", fileName);
+            Main.LOG.error("Encountered an error while parsing AccessTransformers for mod JAR '%s'!", fileName, e);
         }
 
         if (!ats.isEmpty())

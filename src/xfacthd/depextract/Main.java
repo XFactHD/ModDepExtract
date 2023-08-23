@@ -64,8 +64,7 @@ public class Main
             }
             catch (IOException e)
             {
-                LOG.error("Failed to print help");
-                e.printStackTrace();
+                LOG.error("Failed to print help", e);
             }
             return;
         }
@@ -112,8 +111,7 @@ public class Main
         }
         catch (UncheckedIOException e)
         {
-            LOG.error("Encountered an error while listing contents of mods folder(s)");
-            e.printStackTrace();
+            LOG.error("Encountered an error while listing contents of mods folder(s)", e);
             return;
         }
         if (mods.isEmpty())
@@ -165,14 +163,13 @@ public class Main
                     }
                     catch (IOException e)
                     {
-                        LOG.error("Extractor '%s' failed to process mod JAR '%s'", extractor.name(), fileName);
-                        e.printStackTrace();
+                        LOG.error("Extractor '%s' failed to process mod JAR '%s'", extractor.name(), fileName, e);
                     }
                 });
             }
             catch (IOException e)
             {
-                LOG.error("Encountered an exception while reading mod JAR '%s'!", modFile.getFileName());
+                LOG.error("Encountered an exception while reading mod JAR '%s'!", modFile.getFileName(), e);
             }
         }
     }
@@ -195,7 +192,7 @@ public class Main
         }
         catch (IOException e)
         {
-            LOG.error("Encountered an exception while reading JiJ metadata from mod JAR '%s'", fileName);
+            LOG.error("Encountered an exception while reading JiJ metadata from mod JAR '%s'", fileName, e);
             return;
         }
 
@@ -222,14 +219,15 @@ public class Main
             String artifact = identifier.get("artifact").getAsString();
 
             JsonObject version = obj.getAsJsonObject("version");
+            String versionString = version.get("range").getAsString();
             VersionRange range = null;
             try
             {
-                range = VersionRange.createFromVersionSpec(version.get("range").getAsString());
+                range = VersionRange.createFromVersionSpec(versionString);
             }
             catch (InvalidVersionSpecificationException e)
             {
-                LOG.error("Found invalid version range for ");
+                LOG.error("Found invalid version range '%s' for artifact '%s' in mod JAR '%s'", versionString, artifact, fileName);
             }
             ArtifactVersion artifactVersion = new DefaultArtifactVersion(version.get("artifactVersion").getAsString());
 

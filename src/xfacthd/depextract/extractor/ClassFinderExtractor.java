@@ -117,8 +117,7 @@ public class ClassFinderExtractor extends DataExtractor
         }
         catch (IOException e)
         {
-            Main.LOG.error("Failed to read class file '%s' from mod JAR '%s'", classPath, jarName);
-            e.printStackTrace();
+            Main.LOG.error("Failed to read class file '%s' from mod JAR '%s'", classPath, jarName, e);
             return;
         }
 
