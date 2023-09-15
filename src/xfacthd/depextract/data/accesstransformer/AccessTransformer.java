@@ -27,6 +27,28 @@ public record AccessTransformer(Target type, String modifier, String targetClass
         Utils.printDescriptor(writer, modifier, targetClass, member, desc);
     }
 
+    public String prettyPrintTarget(boolean shortened)
+    {
+        String result = targetClass;
+        if (shortened)
+        {
+            int lastDotIdx = targetClass.lastIndexOf('.');
+            if (lastDotIdx > -1)
+            {
+                result = targetClass.substring(lastDotIdx + 1);
+            }
+        }
+        if (type != Target.CLASS)
+        {
+            result += "#" + targetName;
+            if (type != Target.FIELD)
+            {
+                result += shortened ? "()" : targetDescriptor;
+            }
+        }
+        return result;
+    }
+
 
 
     public static AccessTransformer parse(String line, List<String> flaggedATs)

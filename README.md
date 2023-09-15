@@ -25,6 +25,7 @@ Execute the built JAR from a command line interface with the following arguments
   - Useful to find out which mod breaks a coremod by ATing a field the coremod operates on (`FluidBlock#fluid` is a prominent example)
   - The given list most not contain spaces
   - optional, only available when `--extract_ats` is set
+- `--create_at_graph`: If not `none`, a graph of AT entries matching the specified type(s) is added to the AT dump. Multiple types need to be separated by commas without spaces (optional)
 - `--extract_mixins`: If true, Mixin configurations will be extracted from the mod JARs and listed per JAR in a separate `mixins.html` (optional)
 - `--filter_accessors`: If true, Accessor and Invoker Mixins will not be listed in the Mixin details table (optional)
 - `--create_graph`: If true, a graph showing the amount of Mixins per target for all targets with more than one Mixin is added to the Mixin dump (optional)

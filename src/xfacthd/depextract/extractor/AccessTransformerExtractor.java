@@ -5,6 +5,7 @@ import org.apache.commons.lang3.mutable.MutableObject;
 import xfacthd.depextract.Main;
 import xfacthd.depextract.data.accesstransformer.AccessTransformer;
 import xfacthd.depextract.data.JarInJarMeta;
+import xfacthd.depextract.data.accesstransformer.ChartType;
 import xfacthd.depextract.html.Css;
 import xfacthd.depextract.html.Html;
 import xfacthd.depextract.util.*;
@@ -12,16 +13,22 @@ import xfacthd.depextract.util.*;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class AccessTransformerExtractor extends DataExtractor
 {
     private static final String AT_RESULT_FILE_NAME = "accesstransformers.html";
+    private static final String CHART_JS_SRC = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.3.2/chart.umd.js";
+    private static final String CHART_JS_INTEGRITY = "sha512-KIq/d78rZMlPa/mMe2W/QkRgg+l0/GAAu4mGBacU0OQyPV/7EPoGQChDb269GigVoPQit5CqbNRFbgTjXHHrQg==";
 
     private final List<String> flaggedATs = new ArrayList<>();
     private final Map<String, List<AccessTransformer>> atEntries = new HashMap<>();
+    private final Map<AccessTransformer, Integer> atCounts = new HashMap<>();
     private OptionSpec<Boolean> extractATsOpt = null;
     private OptionSpec<String> flaggedATsOpt = null;
+    private OptionSpec<ChartType.Compound> createGraphOpt = null;
     private boolean active = false;
+    private ChartType.Compound createGraph = ChartType.Compound.NONE;
 
     @Override
     public void registerOptions(OptionParser parser)
@@ -36,12 +43,19 @@ public class AccessTransformerExtractor extends DataExtractor
                 .withRequiredArg()
                 .withValuesSeparatedBy(",")
                 .ofType(String.class);
+
+        createGraphOpt = parser.accepts("create_at_graph", "Create a graph showing the amount of ATs per target depending on the specified type (none, class, method, field or all")
+                .availableIf(extractATsOpt)
+                .withRequiredArg()
+                .withValuesConvertedBy(ChartType.ChartTypeValueConverter.INSTANCE)
+                .defaultsTo(ChartType.Compound.NONE);
     }
 
     @Override
     public void readOptions(OptionSet options)
     {
         active = options.valueOf(extractATsOpt);
+        createGraph = options.valueOf(createGraphOpt);
 
         if (active)
         {
@@ -96,7 +110,17 @@ public class AccessTransformerExtractor extends DataExtractor
     }
 
     @Override
-    public void postProcessData() { }
+    public void postProcessData()
+    {
+        if (createGraph.isActive())
+        {
+            atEntries.values()
+                    .stream()
+                    .flatMap(List::stream)
+                    .filter(createGraph::matches)
+                    .forEach(e -> atCounts.compute(e, (at, i) -> i == null ? 1 : (i + 1)));
+        }
+    }
 
     @Override
     public void printResults(boolean darkMode, boolean minify, int modCount)
@@ -131,6 +155,13 @@ public class AccessTransformerExtractor extends DataExtractor
                         Css.declareStickyHeader(style, darkMode);
                         Utils.declareDescriptorSelectors(style);
                     });
+
+                    if (createGraph.isActive())
+                    {
+                        String attrib = "src=\"%s\" integrity=\"%s\" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\""
+                                .formatted(CHART_JS_SRC, CHART_JS_INTEGRITY);
+                        Html.element(head, "script", attrib, "");
+                    }
                 },
                 body ->
                 {
@@ -195,6 +226,72 @@ public class AccessTransformerExtractor extends DataExtractor
                                 }));
                             })
                     );
+
+                    if (createGraph.isActive())
+                    {
+                        body.println("");
+
+                        String title = "%sATs per target".formatted(createGraph.getTitlePrefix());
+
+                        Html.element(body, "h3", "", title);
+                        Html.element(body, "canvas", "id=\"graph\"", "");
+
+                        Html.element(body, "script", "type=\"application/javascript\"", script ->
+                        {
+                            String labels = atCounts.entrySet()
+                                    .stream()
+                                    .filter(e -> e.getValue() > 1)
+                                    .sorted(Comparator.comparingInt(Map.Entry::getValue))
+                                    .map(Map.Entry::getKey)
+                                    .map(at -> at.prettyPrintTarget(false))
+                                    .map(target -> "'" + target + "'")
+                                    .collect(Collectors.joining(","));
+                            String shortLabels = atCounts.entrySet()
+                                    .stream()
+                                    .filter(e -> e.getValue() > 1)
+                                    .sorted(Comparator.comparingInt(Map.Entry::getValue))
+                                    .map(Map.Entry::getKey)
+                                    .map(at -> at.prettyPrintTarget(true))
+                                    .map(target -> "'" + target + "'")
+                                    .collect(Collectors.joining(","));
+                            String values = atCounts.entrySet()
+                                    .stream()
+                                    .filter(e -> e.getValue() > 1)
+                                    .sorted(Comparator.comparingInt(Map.Entry::getValue))
+                                    .map(Map.Entry::getValue)
+                                    .map(Object::toString)
+                                    .collect(Collectors.joining(","));
+
+                            script.printMultiLine("""
+                                    const graph = new Chart('graph', {
+                                        type: 'bar',
+                                        data: {
+                                            labels: [%s],
+                                            shortLabels: [%s],
+                                            datasets: [{
+                                                label: '%s',
+                                                data: [%s]
+                                            }]
+                                        },
+                                        options: {
+                                            scales: {
+                                                x: {
+                                                    ticks: {
+                                                        callback: function(value, index, ticks) {
+                                                            return this.chart.config.data.shortLabels[index];
+                                                        }
+                                                    }
+                                                },
+                                                y: {
+                                                    beginAtZero: true
+                                                }
+                                            }
+                                        }
+                                    });
+                                    """.formatted(labels, shortLabels, title, values)
+                            );
+                        });
+                    }
                 }
         );
 
