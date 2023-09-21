@@ -6,8 +6,7 @@ import joptsimple.*;
 import joptsimple.util.PathConverter;
 import joptsimple.util.PathProperties;
 import org.apache.maven.artifact.versioning.*;
-import xfacthd.depextract.data.FileEntry;
-import xfacthd.depextract.data.JarInJarMeta;
+import xfacthd.depextract.data.*;
 import xfacthd.depextract.extractor.*;
 import xfacthd.depextract.log.Log;
 import xfacthd.depextract.util.*;
@@ -105,9 +104,11 @@ public class Main
 
         LOG.info("Listing all mod JARs...");
         List<FileEntry> mods;
-        try (Stream<Path> files = modFolders.stream().flatMap(Utils::listFiles))
+        try (Stream<SourceAwarePath> files = modFolders.stream().flatMap(Utils::listFiles))
         {
-            mods = files.filter(path -> path.getFileName().toString().endsWith(".jar")).map(FileEntry::of).toList();
+            mods = files.filter(path -> path.filePath().getFileName().toString().endsWith(".jar"))
+                    .map(FileEntry::of)
+                    .toList();
         }
         catch (UncheckedIOException e)
         {
@@ -122,7 +123,7 @@ public class Main
         LOG.info("Found %d mod JARs", mods.size());
 
         LOG.info("Discovering mod entries...");
-        discoverModEntries(mods, extractors, false, modFolder, directory.relativize(modFolder));
+        discoverModEntries(mods, extractors, false);
         int modCount = depExtractor.getModCount();
         LOG.info("Discovered %d mod entries in %d mod JARs", modCount, mods.size());
 
@@ -139,27 +140,23 @@ public class Main
     }
 
     private static void discoverModEntries(
-            List<FileEntry> mods, List<DataExtractor> extractors, boolean nested, Path sourcePath, Path sourcePathRel
+            List<FileEntry> mods, List<DataExtractor> extractors, boolean nested
     )
     {
         for (FileEntry modEntry : mods)
         {
-            Path modFile = modEntry.path();
+            Path modFile = modEntry.filePath();
             LOG.debug("Reading mod JAR '%s'...", modFile.getFileName());
 
             try (FileSystem jarFs = FileSystems.newFileSystem(modFile))
             {
                 String fileName = modFile.getFileName().toString();
-                if (!nested)
-                {
-                    // JiJ doesn't support recursive discovery
-                    extractJiJedMods(sourcePath.relativize(modFile), fileName, jarFs, extractors);
-                }
+                extractJiJedMods(modFile, fileName, jarFs, extractors);
                 extractors.forEach(extractor ->
                 {
                     try
                     {
-                        extractor.acceptFile(fileName, jarFs, nested, modEntry.jijMeta(), sourcePathRel);
+                        extractor.acceptFile(fileName, jarFs, nested, modEntry);
                     }
                     catch (IOException e)
                     {
@@ -235,9 +232,9 @@ public class Main
 
             JarInJarMeta jijMeta = new JarInJarMeta(group, artifact, range, artifactVersion, obfuscated);
 
-            jarEntries.add(new FileEntry(path, jijMeta));
+            jarEntries.add(new FileEntry(modPath, path, jijMeta));
         }
 
-        discoverModEntries(jarEntries, extractors, true, null, modPath);
+        discoverModEntries(jarEntries, extractors, true);
     }
 }

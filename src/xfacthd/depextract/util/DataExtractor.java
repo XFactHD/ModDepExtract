@@ -3,7 +3,7 @@ package xfacthd.depextract.util;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import xfacthd.depextract.Main;
-import xfacthd.depextract.data.JarInJarMeta;
+import xfacthd.depextract.data.FileEntry;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -19,7 +19,7 @@ public abstract class DataExtractor
 
     public abstract String name();
 
-    public abstract void acceptFile(String fileName, FileSystem modJar, boolean jij, JarInJarMeta jijMeta, Path sourcePath) throws IOException;
+    public abstract void acceptFile(String fileName, FileSystem modJar, boolean jij, FileEntry modInfo) throws IOException;
 
     public abstract void postProcessData();
 

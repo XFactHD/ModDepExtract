@@ -7,7 +7,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 import xfacthd.depextract.Main;
-import xfacthd.depextract.data.JarInJarMeta;
+import xfacthd.depextract.data.FileEntry;
 import xfacthd.depextract.data.mixin.*;
 import xfacthd.depextract.html.*;
 import xfacthd.depextract.util.*;
@@ -70,7 +70,7 @@ public class MixinExtractor extends DataExtractor
     public String name() { return "Mixins"; }
 
     @Override
-    public void acceptFile(String fileName, FileSystem modJar, boolean jij, JarInJarMeta jijMeta, Path sourcePath) throws IOException
+    public void acceptFile(String fileName, FileSystem modJar, boolean jij, FileEntry modInfo) throws IOException
     {
         Manifest manifest = findManifest(modJar, fileName);
         if (manifest == null) { return; }

@@ -4,8 +4,8 @@ import com.google.gson.*;
 import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import xfacthd.depextract.Main;
+import xfacthd.depextract.data.FileEntry;
 import xfacthd.depextract.data.coremod.CoremodConfig;
-import xfacthd.depextract.data.JarInJarMeta;
 import xfacthd.depextract.html.Css;
 import xfacthd.depextract.html.Html;
 import xfacthd.depextract.util.*;
@@ -45,7 +45,7 @@ public class CoremodExtractor extends DataExtractor
     public String name() { return "Coremods"; }
 
     @Override
-    public void acceptFile(String fileName, FileSystem modJar, boolean jij, JarInJarMeta jijMeta, Path sourcePath) throws IOException
+    public void acceptFile(String fileName, FileSystem modJar, boolean jij, FileEntry modInfo) throws IOException
     {
         Path cmEntry = modJar.getPath("META-INF/coremods.json");
         if (!Files.exists(cmEntry)) { return; }

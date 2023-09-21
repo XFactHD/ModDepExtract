@@ -9,7 +9,7 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
 import xfacthd.depextract.Main;
-import xfacthd.depextract.data.JarInJarMeta;
+import xfacthd.depextract.data.FileEntry;
 import xfacthd.depextract.data.dependency.*;
 import xfacthd.depextract.html.*;
 import xfacthd.depextract.util.DataExtractor;
@@ -87,8 +87,9 @@ public class DependencyExtractor extends DataExtractor
     public String name() { return "Dependencies"; }
 
     @Override
-    public void acceptFile(String fileName, FileSystem modJar, boolean jij, JarInJarMeta jijMeta, Path sourcePath) throws IOException
+    public void acceptFile(String fileName, FileSystem modJar, boolean jij, FileEntry modInfo) throws IOException
     {
+        Path sourcePath = modInfo.srcPath();
         Path tomlEntry = modJar.getPath("META-INF/mods.toml");
         Manifest manifest = findManifest(modJar, fileName);
         if (Files.exists(tomlEntry))
@@ -125,13 +126,17 @@ public class DependencyExtractor extends DataExtractor
             else if (compareManifestEntry(manifest, MOD_TYPE_NAME, "GAMELIBRARY", "LIBRARY") || jij)
             {
                 String name = fileName.toLowerCase(Locale.ROOT);
-                String version = jij ? jijMeta.version().toString() : "NONE";
+                String version = jij ? modInfo.jijMeta().version().toString() : "NONE";
                 String modType = "GAMELIBRARY";// JiJed JARs without mod metadata are considered GAMELIBRARIEs
 
                 if (manifest != null)
                 {
                     Attributes attribs = manifest.getMainAttributes();
-                    if (attribs.containsKey(IMPL_TITLE_NAME))
+                    if (attribs.containsKey(AUTO_MOD_NAME))
+                    {
+                        name = attribs.getValue(AUTO_MOD_NAME);
+                    }
+                    else if (attribs.containsKey(IMPL_TITLE_NAME))
                     {
                         name = attribs.getValue(IMPL_TITLE_NAME);
                     }
@@ -544,6 +549,10 @@ public class DependencyExtractor extends DataExtractor
         {
             displayName = attrs.getValue(IMPL_TITLE_NAME);
         }
+        else if (attrs.containsKey(AUTO_MOD_NAME))
+        {
+            displayName = attrs.getValue(AUTO_MOD_NAME);
+        }
         else
         {
             Main.LOG.warning("Can't determine name of language provider in JAR '%s', skipping", fileName);
@@ -725,7 +734,7 @@ public class DependencyExtractor extends DataExtractor
                                 content,
                                 "b",
                                 "style=\"text-weight: bold\"",
-                                entry.fileSource().toString()
+                                Utils.trySubstringAfterLast(entry.fileSource().toString().replaceAll("\\\\", "/"), '/')
                         );
                     }
                     else

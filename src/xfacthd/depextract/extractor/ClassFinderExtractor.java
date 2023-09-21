@@ -5,7 +5,7 @@ import org.apache.commons.lang3.mutable.MutableObject;
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 import xfacthd.depextract.Main;
-import xfacthd.depextract.data.JarInJarMeta;
+import xfacthd.depextract.data.FileEntry;
 import xfacthd.depextract.data.classfinder.LocatedTarget;
 import xfacthd.depextract.data.classfinder.ContainingClass;
 import xfacthd.depextract.html.Css;
@@ -96,7 +96,7 @@ public class ClassFinderExtractor extends DataExtractor
     public String name() { return "ClassFinder"; }
 
     @Override
-    public void acceptFile(String fileName, FileSystem modJar, boolean jij, JarInJarMeta jijMeta, Path sourcePath) throws IOException
+    public void acceptFile(String fileName, FileSystem modJar, boolean jij, FileEntry modInfo) throws IOException
     {
         try (Stream<Path> stream = Files.walk(modJar.getPath("/")))
         {

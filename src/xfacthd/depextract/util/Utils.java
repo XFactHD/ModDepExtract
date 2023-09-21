@@ -1,6 +1,7 @@
 package xfacthd.depextract.util;
 
 import xfacthd.depextract.Main;
+import xfacthd.depextract.data.SourceAwarePath;
 import xfacthd.depextract.html.*;
 
 import java.io.*;
@@ -285,16 +286,27 @@ public class Utils
         }
     }
 
-    public static Stream<Path> listFiles(Path root)
+    public static Stream<SourceAwarePath> listFiles(Path root)
     {
         try
         {
-            return Files.list(root);
+            //noinspection resource
+            return Files.list(root).map(p -> new SourceAwarePath(root, p));
         }
         catch (IOException e)
         {
             throw new UncheckedIOException(e);
         }
+    }
+
+    public static String trySubstringAfterLast(String text, char target)
+    {
+        int idx = text.lastIndexOf(target);
+        if (idx > -1)
+        {
+            text = text.substring(idx + 1);
+        }
+        return text;
     }
 
     public static void openFileInDefaultSoftware(String fileName)

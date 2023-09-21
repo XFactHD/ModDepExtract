@@ -2,10 +2,10 @@ package xfacthd.depextract.data;
 
 import java.nio.file.Path;
 
-public record FileEntry(Path path, JarInJarMeta jijMeta)
+public record FileEntry(Path srcPath, Path filePath, JarInJarMeta jijMeta)
 {
-    public static FileEntry of(Path path)
+    public static FileEntry of(SourceAwarePath path)
     {
-        return new FileEntry(path, null);
+        return new FileEntry(path.srcPath(), path.filePath(), null);
     }
 }
