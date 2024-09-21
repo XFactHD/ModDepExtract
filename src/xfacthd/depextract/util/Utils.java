@@ -30,15 +30,6 @@ public class Utils
     private static final String ATTR_CLASS_PRIMITIVE = "class=\"" + CLASS_PRIMITIVE + "\"";
     private static final String ATTR_CLASS_TYPE = "class=\"" + CLASS_TYPE + "\"";
 
-    public static String getForgeVersion(String forgeVersion)
-    {
-        if (forgeVersion.contains("-"))
-        {
-            forgeVersion = forgeVersion.substring(forgeVersion.indexOf("-") + 1);
-        }
-        return forgeVersion;
-    }
-
     public static PrintWriter makePrintWriter(String fileName)
     {
         File outFile = new File(fileName);

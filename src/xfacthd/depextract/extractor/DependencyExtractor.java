@@ -26,7 +26,7 @@ public class DependencyExtractor extends DataExtractor
     public static final String DEP_RESULT_FILE_NAME = "dependencies.html";
     private static final Comparator<ModEntry> ENTRY_COMPARATOR = (entryOne, entryTwo) -> compareModIDs(entryOne.modId(), entryTwo.modId());
     private static final Comparator<Dependency> DEP_COMPARATOR = (depOne, depTwo) -> compareModIDs(depOne.modId(), depTwo.modId());
-    private static final Dependency NULL_DEPENDENCY = new Dependency(null, null, false);
+    private static final Dependency NULL_DEPENDENCY = new Dependency(null, null, Dependency.Type.OPTIONAL);
     private static final DepResult NULL_RESULT = new DepResult(null, false, false, false);
     private static final Attributes.Name AUTO_MOD_NAME = new Attributes.Name("Automatic-Module-Name");
     private static final Attributes.Name IMPL_TITLE_NAME = new Attributes.Name("Implementation-Title");
@@ -37,11 +37,11 @@ public class DependencyExtractor extends DataExtractor
     private final Table<ModEntry, Dependency, DepResult> depResults = HashBasedTable.create(0, 4);
     private final Multimap<String, ModEntry> duplicates = HashMultimap.create();
     private OptionSpec<String> minecraftOpt = null;
-    private OptionSpec<String> forgeOpt = null;
+    private OptionSpec<String> neoForgeOpt = null;
     private OptionSpec<Boolean> onlyUnsatisfiedOpt = null;
     private OptionSpec<Boolean> onlySatisfiedOpt = null;
     private String mcVersion = "";
-    private String forgeVersion = "";
+    private String neoForgeVersion = "";
     private boolean onlyUnsatisfied = false;
     private boolean onlySatisfied = false;
     private int jarCount = 0;
@@ -55,7 +55,7 @@ public class DependencyExtractor extends DataExtractor
                 .ofType(String.class)
                 .required();
 
-        forgeOpt = parser.accepts("forge", "The version of Forge being used")
+        neoForgeOpt = parser.accepts("neoforge", "The version of NeoForge being used")
                 .withRequiredArg()
                 .ofType(String.class)
                 .required();
@@ -75,7 +75,7 @@ public class DependencyExtractor extends DataExtractor
     public void readOptions(OptionSet options)
     {
         this.mcVersion = options.valueOf(minecraftOpt);
-        this.forgeVersion = Utils.getForgeVersion(options.valueOf(forgeOpt));
+        this.neoForgeVersion = options.valueOf(neoForgeOpt);
         this.onlySatisfied = options.valueOf(onlySatisfiedOpt);
         this.onlyUnsatisfied = options.valueOf(onlyUnsatisfiedOpt);
     }
@@ -90,7 +90,7 @@ public class DependencyExtractor extends DataExtractor
     public void acceptFile(String fileName, FileSystem modJar, boolean jij, FileEntry modInfo) throws IOException
     {
         Path sourcePath = modInfo.srcPath();
-        Path tomlEntry = modJar.getPath("META-INF/mods.toml");
+        Path tomlEntry = modJar.getPath("META-INF/neoforge.mods.toml");
         Manifest manifest = findManifest(modJar, fileName);
         if (Files.exists(tomlEntry))
         {
@@ -174,9 +174,9 @@ public class DependencyExtractor extends DataExtractor
         Map<String, ModEntry> processed = new HashMap<>();
         for (ModEntry entry : modEntries.values())
         {
-            if (entry.modId().equals("minecraft") || entry.modId().equals("forge"))
+            if (entry.modId().equals("minecraft") || entry.modId().equals("neoforge"))
             {
-                // Don't add MC and Forge to the results
+                // Don't add MC and NeoForge to the results
                 continue;
             }
 
@@ -211,19 +211,11 @@ public class DependencyExtractor extends DataExtractor
                 ModEntry depMod = entries.isEmpty() ? null : entries.iterator().next();
 
                 boolean installed = depMod != null;
-                boolean inRange = installed && dep.versionRange().containsVersion(depMod.version());
-                boolean valid = installed ? inRange : !dep.mandatory();
+                boolean inRange = installed && dep.isVersionRangeSatisfied(depMod.version());
+                boolean valid = dep.type().isSatisfied(installed, inRange);
+                String installedVersion = installed ? depMod.version().toString() : "-";
 
-                depResults.put(
-                        entry,
-                        dep,
-                        new DepResult(
-                                installed ? depMod.version().toString() : "-",
-                                installed,
-                                inRange,
-                                valid
-                        )
-                );
+                depResults.put(entry, dep, new DepResult(installedVersion, installed, inRange, valid));
             }
         }
 
@@ -297,7 +289,7 @@ public class DependencyExtractor extends DataExtractor
                     Html.element(body, "h1", "", "Mod Dependency Analysis");
 
                     body.println(String.format("Minecraft version: %s", mcVersion));
-                    body.println(String.format("Forge version: %s-%s", mcVersion, forgeVersion));
+                    body.println(String.format("NeoForge version: %s", neoForgeVersion));
                     body.println(String.format("Found %d mods in %d mod JARs", modCount, jarCount));
 
                     if (onlySatisfied)
@@ -379,7 +371,7 @@ public class DependencyExtractor extends DataExtractor
                                 Html.tableHeader(row, tableAttrib, "Dependency");
                                 Html.tableHeader(row, tableAttrib, "Requested range");
                                 Html.tableHeader(row, tableAttrib, "Installed version");
-                                Html.tableHeader(row, tableAttrib, "Required");
+                                Html.tableHeader(row, tableAttrib, "Type");
                                 Html.tableHeader(row, tableAttrib, "Installed");
                                 Html.tableHeader(row, tableAttrib, "In range");
                                 Html.tableHeader(row, tableAttrib, "Satisfied");
@@ -417,9 +409,9 @@ public class DependencyExtractor extends DataExtractor
                                     }
 
                                     Html.tableCell(row, tableAttrib, nullResult ? "" : dep.modId());
-                                    Html.tableCell(row, tableAttrib, nullResult ? "" : dep.versionRange().toString());
+                                    Html.tableCell(row, tableAttrib, nullResult ? "" : dep.getVersionRangeString());
                                     Html.tableCell(row, installedAttrib, nullResult ? "" : installedVersion);
-                                    Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, dep.mandatory(), nullResult));
+                                    Html.tableCell(row, tableAttrib, cell -> dep.type().print(cell, nullResult));
                                     Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, result.installed(), nullResult));
                                     Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, result.inRange(), nullResult));
                                     Html.tableCell(row, tableAttrib, cell -> printBooleanOrEmpty(cell, result.valid(), nullResult));
@@ -440,7 +432,7 @@ public class DependencyExtractor extends DataExtractor
 
     public String getMCVersion() { return mcVersion; }
 
-    public String getForgeVersion() { return forgeVersion; }
+    public String getNeoForgeVersion() { return neoForgeVersion; }
 
 
 
@@ -519,6 +511,10 @@ public class DependencyExtractor extends DataExtractor
         {
             String depModId = (String) depEntry.get("modId");
             String versionRange = (String) depEntry.get("versionRange");
+            if (versionRange == null)
+            {
+                versionRange = Dependency.UNBOUNDED_VERSION;
+            }
 
             VersionRange range;
             try
@@ -531,12 +527,15 @@ public class DependencyExtractor extends DataExtractor
                 range = null;
             }
 
-            Dependency dependency = new Dependency(
-                    depModId,
-                    range,
-                    (Boolean) depEntry.get("mandatory")
-            );
-            depList.add(dependency);
+            String typeEntry = (String) depEntry.get("type");
+            Dependency.Type type = Dependency.Type.parse(typeEntry);
+            if (type == null)
+            {
+                Main.LOG.error("Found dependency for '%s' with invalid type '%s' in mod '%s', skipping!", depModId, typeEntry, modId);
+                continue;
+            }
+
+            depList.add(new Dependency(depModId, range, type));
         }
     }
 
@@ -594,7 +593,7 @@ public class DependencyExtractor extends DataExtractor
 
     private static String getProviderNameFromByteCode(String fileName, FileSystem modJar)
     {
-        Path serviceEntry = modJar.getPath("META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider");
+        Path serviceEntry = modJar.getPath("META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader");
         if (!Files.exists(serviceEntry))
         {
             Main.LOG.error("Language Provider in JAR '%s' doesn't contain an IModLanguageProvider service file, this is invalid", fileName);
@@ -672,7 +671,7 @@ public class DependencyExtractor extends DataExtractor
     private void addDefaultMods()
     {
         modEntries.put("minecraft", new ModEntry("", "minecraft", "Minecraft", new DefaultArtifactVersion(mcVersion), List.of(), "MOD", false, null));
-        modEntries.put("forge", new ModEntry("", "forge", "Minecraft Forge", new DefaultArtifactVersion(forgeVersion), List.of(), "MOD", false, null));
+        modEntries.put("neoforge", new ModEntry("", "neoforge", "NeoForge", new DefaultArtifactVersion(neoForgeVersion), List.of(), "MOD", false, null));
         hiddenModCount = 2;
     }
 
@@ -682,8 +681,8 @@ public class DependencyExtractor extends DataExtractor
 
         if (idOne.equals("minecraft")) { return -1; }
         if (idTwo.equals("minecraft")) { return 1; }
-        if (idOne.equals("forge")) { return -1; }
-        if (idTwo.equals("forge")) { return 1; }
+        if (idOne.equals("neoforge")) { return -1; }
+        if (idTwo.equals("neoforge")) { return 1; }
 
         return idOne.compareTo(idTwo);
     }

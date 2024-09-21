@@ -6,6 +6,7 @@ import java.util.function.Consumer;
 public final class Html
 {
     public static final String COLOR_RED = "#f85149";
+    public static final String COLOR_ORANGE = "#ff6200";
     public static final String COLOR_GREEN = "#2ea043";
 
     public static void html(PrintWriter writer, boolean minify, String bodyAttribs, Consumer<HtmlWriter> headWriter, Consumer<HtmlWriter> bodyWriter)

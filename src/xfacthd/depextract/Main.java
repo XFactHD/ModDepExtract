@@ -79,7 +79,7 @@ public class Main
         boolean openResult = options.valueOf(openResultOpt);
 
         LOG.info("Minecraft version: " + depExtractor.getMCVersion());
-        LOG.info("Forge version: " + depExtractor.getForgeVersion());
+        LOG.info("NeoForge version: " + depExtractor.getNeoForgeVersion());
         LOG.info("Instance directory: " + directory);
 
         Preconditions.checkArgument(Files.isDirectory(directory), "Expected a directory for argument --directory, got a file");

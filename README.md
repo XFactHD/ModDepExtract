@@ -14,7 +14,7 @@ ModDepExtract is a CLI tool to extract dependency information and other details 
 Execute the built JAR from a command line interface with the following arguments:
 
 - `--minecraft`: The Minecraft version the mods are run with
-- `--forge`: The Forge version the mods are run with
+- `--neoforge`: The NeoForge version the mods are run with
 - `--directory`: The game directory as configured in the official launcher. The "mods" folder is expected to exist in this directory
 - `--add_mod_dirs`: Comma-separated list of additional non-standard mod folders next to the standard "mods" folder (optional)
 - `--onlySatisfied`: If true, only mods where all dependencies are satisfied will be listed in the results
