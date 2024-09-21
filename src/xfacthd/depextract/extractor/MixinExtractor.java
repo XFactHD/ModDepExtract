@@ -24,8 +24,7 @@ public class MixinExtractor extends DataExtractor
     private static final MixinTarget[] EMPTY_ARRAY = new MixinTarget[0];
     private static final MixinInjection[] EMPTY_INJ_ARRAY = new MixinInjection[0];
     private static final Gson GSON = new Gson();
-    private static final String CHART_JS_SRC = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.3.2/chart.umd.js";
-    private static final String CHART_JS_INTEGRITY = "sha512-KIq/d78rZMlPa/mMe2W/QkRgg+l0/GAAu4mGBacU0OQyPV/7EPoGQChDb269GigVoPQit5CqbNRFbgTjXHHrQg==";
+    private static final String CHART_JS_SRC = "https://cdn.jsdelivr.net/npm/chart.js@4.3.2/auto/+esm";
 
     private final Map<String, List<MixinConfig>> mixinEntries = new HashMap<>();
     private final List<Pair<String, List<String>>> mixinsPerTarget = new ArrayList<>();
@@ -396,9 +395,18 @@ public class MixinExtractor extends DataExtractor
 
                     if (createGraph)
                     {
-                        String attrib = "src=\"%s\" integrity=\"%s\" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\""
-                                .formatted(CHART_JS_SRC, CHART_JS_INTEGRITY);
-                        Html.element(head, "script", attrib, "");
+                        Html.element(head, "link", "rel=\"modulepreload\" href=\"%s\"".formatted(CHART_JS_SRC), contentWriter -> {
+                            contentWriter.disableNewLine();
+                            contentWriter.print("");
+                            contentWriter.enableNewLine();
+                        }, false);
+
+                        // used by chart.js
+                        Html.element(head, "link", "rel=\"modulepreload\" href=\"https://cdn.jsdelivr.net/npm/@kurkle/color@0.3.2/+esm\"", contentWriter -> {
+                            contentWriter.disableNewLine();
+                            contentWriter.print("");
+                            contentWriter.enableNewLine();
+                        }, false);
                     }
                 },
                 body ->
@@ -537,57 +545,44 @@ public class MixinExtractor extends DataExtractor
                         Html.element(body, "canvas", "id=\"graph\"", "");
                     }
 
-                    Html.element(body, "script", "type=\"application/javascript\"", script ->
+                    Html.element(body, "script", "type=\"module\" async", script ->
                     {
+                        if (createGraph)
+                            script.print("import { Chart } from \"%s\"\n".formatted(CHART_JS_SRC));
+
                         script.printMultiLine("""
-                                function onReady(callback) {
-                                    if (document.readyState === "complete" || document.readyState === "interactive") {
-                                        setTimeout(callback, 1);
-                                    }
-                                    else {
-                                        document.addEventListener("DOMContentLoaded", callback);
-                                    }
-                                }
-                                
-                                onReady(function() {
-                                    const buttons = document.getElementsByClassName("tooltip");
-                                    for (let item of buttons) {
-                                        const tooltip = item.querySelector(".tooltip_content");
-                                        item.addEventListener("click", (event) =>
-                                            toggleTooltip(event, tooltip)
-                                        );
-                                        tooltip.addEventListener("click", (event) => {
-                                            if (tooltip.style.display !== 'none') {
-                                                event.stopPropagation();
-                                            }
-                                        });
-                                    }
-                                    document.body.addEventListener("click", () =>
-                                        closeAllTooltips()
-                                    );
-                                });
-                                
                                 function closeAllTooltips() {
                                     const tooltips = document.getElementsByClassName("tooltip_content");
-                                    for (let item of tooltips) {
-                                        item.classList.remove("show");
+                                    for (const item of tooltips) {
+                                        item.classList.remove("show")
                                     }
                                 }
                                 
                                 function toggleTooltip(event, tooltip) {
-                                    if (!tooltip.classList.contains("show")) {
-                                        closeAllTooltips();
-                                    }
-                                    tooltip.classList.toggle("show");
+                                    if (!tooltip.classList.contains("show"))
+                                        closeAllTooltips()
+                                
+                                    tooltip.classList.toggle("show")
                                     
-                                    event.stopPropagation();
+                                    event.stopPropagation()
                                 }
+                                
+                                const buttons = document.getElementsByClassName("tooltip")
+                                for (const item of buttons) {
+                                    const tooltip = item.querySelector(".tooltip_content")
+                                    item.addEventListener("click", event => toggleTooltip(event, tooltip))
+                                    tooltip.addEventListener("click", event => {
+                                        if (tooltip.style.display !== "none")
+                                            event.stopPropagation()
+                                    })
+                                }
+                                document.body.addEventListener("click", () => closeAllTooltips())
                                 """
                         );
 
                         if (createGraph)
                         {
-                            script.print("\n");
+                            script.print(""); // empty line
 
                             String labels = mixinsPerTarget.stream()
                                     .filter(e -> e.getValue().size() > 1)
@@ -600,23 +595,21 @@ public class MixinExtractor extends DataExtractor
                                     .map(mixins -> Integer.toString(mixins.size()))
                                     .collect(Collectors.joining(", "));
                             script.printMultiLine("""
-                                    const graph = new Chart('graph', {
-                                        type: 'bar',
+                                    const graph = new Chart("graph", {
+                                        type: "bar",
                                         data: {
                                             labels: [%s],
                                             datasets: [{
-                                                label: 'Mixins per target',
+                                                label: "Mixins per target",
                                                 data: [%s]
                                             }]
                                         },
                                         options: {
                                             scales: {
-                                                y: {
-                                                    beginAtZero: true
-                                                }
+                                                y: { beginAtZero: true }
                                             }
                                         }
-                                    });
+                                    })
                                     """.formatted(labels, values)
                             );
                         }
