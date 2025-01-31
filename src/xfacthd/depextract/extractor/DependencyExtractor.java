@@ -15,6 +15,7 @@ import xfacthd.depextract.html.*;
 import xfacthd.depextract.util.DataExtractor;
 import xfacthd.depextract.util.Utils;
 
+import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
@@ -95,12 +96,6 @@ public class DependencyExtractor extends DataExtractor
         if (Files.exists(tomlEntry))
         {
             InputStream tomlStream = Files.newInputStream(tomlEntry);
-            if (manifest == null)
-            {
-                Main.LOG.error("Encountered an error while retrieving metadata from mod JAR '%s'", fileName);
-                return;
-            }
-
             Multimap<String, ModEntry> entries = parseModEntriesInFile(sourcePath, fileName, tomlStream, manifest, jij);
             if (!entries.isEmpty())
             {
@@ -436,11 +431,20 @@ public class DependencyExtractor extends DataExtractor
 
 
 
-    private static Multimap<String, ModEntry> parseModEntriesInFile(Path sourcePath, String fileName, InputStream tomlStream, Manifest manifest, boolean jij)
+    private static Multimap<String, ModEntry> parseModEntriesInFile(Path sourcePath, String fileName, InputStream tomlStream, @Nullable Manifest manifest, boolean jij)
     {
         Multimap<String, ModEntry> modList = HashMultimap.create();
 
-        Toml toml = new Toml().read(tomlStream);
+        Toml toml;
+        try
+        {
+            toml = new Toml().read(tomlStream);
+        }
+        catch (Throwable t)
+        {
+            Main.LOG.error("Failed to parse mod definition in mod JAR '%s'", fileName, t);
+            return modList;
+        }
 
         List<Map<String, Object>> mods = toml.getList("mods");
 
@@ -477,7 +481,14 @@ public class DependencyExtractor extends DataExtractor
             String version = (String) mod.get("version");
             if (version != null && version.equals("${file.jarVersion}"))
             {
-                version = manifest.getMainAttributes().getValue(IMPL_VER_NAME);
+                if (manifest != null)
+                {
+                    version = manifest.getMainAttributes().getValue(IMPL_VER_NAME);
+                }
+                else
+                {
+                    Main.LOG.error("Mod definition in mod JAR '%s' declares version as ${file.jarVersion} but does not provide a MANIFEST.MF", fileName);
+                }
             }
             if (version == null)
             {

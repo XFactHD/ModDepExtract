@@ -1,6 +1,7 @@
 package xfacthd.depextract.extractor;
 
 import com.google.gson.*;
+import com.moandjiezana.toml.Toml;
 import joptsimple.*;
 import org.apache.commons.lang3.mutable.MutableObject;
 import org.apache.commons.lang3.tuple.Pair;
@@ -72,13 +73,10 @@ public class MixinExtractor extends DataExtractor
     @Override
     public void acceptFile(String fileName, FileSystem modJar, boolean jij, FileEntry modInfo) throws IOException
     {
-        Manifest manifest = findManifest(modJar, fileName);
-        if (manifest == null) { return; }
+        List<String> mixinConfigs = new ArrayList<>();
 
-        String mixinCfgName = manifest.getMainAttributes().getValue("MixinConfigs");
-        if (mixinCfgName == null || mixinCfgName.isEmpty()) { return; }
-
-        List<String> mixinConfigs = Arrays.stream(mixinCfgName.split(",")).map(String::trim).toList();
+        collectMixinConfigsFromManifest(mixinConfigs, modJar, fileName);
+        collectMixinConfigsFromModsToml(mixinConfigs, modJar, fileName);
 
         for (String configName : mixinConfigs)
         {
@@ -166,6 +164,47 @@ public class MixinExtractor extends DataExtractor
         }
 
         Main.LOG.info("Mixin targets collected");
+    }
+
+    private void collectMixinConfigsFromManifest(List<String> mixinConfigs, FileSystem modJar, String fileName)
+    {
+        Manifest manifest = findManifest(modJar, fileName);
+        if (manifest != null)
+        {
+            String mixinCfgName = manifest.getMainAttributes().getValue("MixinConfigs");
+            if (mixinCfgName != null && !mixinCfgName.isEmpty())
+            {
+                mixinConfigs.addAll(Arrays.stream(mixinCfgName.split(",")).map(String::trim).toList());
+            }
+        }
+    }
+
+    private void collectMixinConfigsFromModsToml(List<String> mixinConfigs, FileSystem modJar, String fileName) throws IOException
+    {
+        Path tomlEntry = modJar.getPath("META-INF/neoforge.mods.toml");
+        if (!Files.exists(tomlEntry)) return;
+
+        InputStream tomlStream = Files.newInputStream(tomlEntry);
+        Toml toml;
+        try
+        {
+            toml = new Toml().read(tomlStream);
+        }
+        catch (Throwable t)
+        {
+            Main.LOG.error("Failed to parse mod definition in mod JAR '%s'", fileName, t);
+            return;
+        }
+        tomlStream.close();
+
+        List<Map<String, Object>> mixins = toml.getList("mixins");
+        if (mixins == null || mixins.isEmpty()) return;
+
+        for (Map<String, Object> mixin : mixins)
+        {
+            String config = (String) mixin.get("config");
+            mixinConfigs.add(config);
+        }
     }
 
     private Pair<MixinTarget[], MixinInjection[]> analyseMixinClass(MixinEntry entry)
